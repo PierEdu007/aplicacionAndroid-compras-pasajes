@@ -17,7 +17,7 @@ import { Shield, Lock, Mail, ArrowRight } from 'lucide-react-native';
 
 export const LoginScreen: React.FC = () => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@turismotunkychasky.com.pe');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 

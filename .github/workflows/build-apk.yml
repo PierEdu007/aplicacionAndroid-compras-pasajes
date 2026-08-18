@@ -59,18 +59,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.5
-          name: Tunky Chasky Admin v1.0.5 (Notificaciones con Sonido, Vibración y Contador en Vivo)
+          tag_name: v1.0.6
+          name: Tunky Chasky Admin v1.0.6 (Corrección de Cierre Inesperado y Login Limpio)
           body: |
-            ## 📱 Tunky Chasky Admin v1.0.5
+            ## 📱 Tunky Chasky Admin v1.0.6
             
             ### 📥 Descarga Directa:
             Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### ✨ Novedades v1.0.5:
-            - **🔔 Notificaciones Push del Sistema con Sonido y Vibración**: Al recibir una nueva venta de la web, Android emite el sonido de alerta y vibra.
-            - **Banner Flotante en Pantalla**: Muestra el nombre del pasajero, asiento y monto con botón directo "Ver y Confirmar".
-            - **Contador Rojo Dinámico**: La burbuja de "Ventas" ahora **disminuye y se actualiza en tiempo real** automáticamente al confirmar o rechazar cada pago.
+            ### ✨ Correcciones y Novedades v1.0.6:
+            - **Estabilidad Total al Iniciar Sesión**: Corregido el cierre inesperado que ocurría al autenticar y entrar al menú principal.
+            - **Plugin y Permisos de Notificaciones**: Configurado `expo-notifications` y `POST_NOTIFICATIONS` nativamente en Android.
+            - **Login Limpio**: El campo de correo ahora inicia completamente vacío sin correos prellenados por defecto.
+            - **Notificaciones con Sonido, Vibración y Banner**: Alertas en tiempo real para nuevas compras de la web.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

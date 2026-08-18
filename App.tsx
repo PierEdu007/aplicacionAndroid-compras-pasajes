@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Platform,
   AppState,
-  Animated,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { THEME } from './src/constants/theme';
@@ -29,23 +28,24 @@ import {
   CreditCard,
   Armchair,
   FileSpreadsheet,
-  Plus,
   ShoppingBag,
   Bell,
   ArrowRight,
   X,
 } from 'lucide-react-native';
 
-// Set notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldSetBanner: true,
-    shouldSetList: true,
-  }),
-});
+// Safe notification handler initialization
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (err) {
+  console.warn('NotificationHandler init skipped:', err);
+}
 
 type TabType = 'DASHBOARD' | 'SALES' | 'TRIPS' | 'ACCOUNTING';
 
@@ -59,7 +59,7 @@ interface NewSaleAlert {
 }
 
 const MainNavigator: React.FC = () => {
-  const { user, loading, isContador, isVendedor, isAdmin } = useAuth();
+  const { user, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<TabType>('DASHBOARD');
   const [isDirectSaleOpen, setIsDirectSaleOpen] = useState(false);
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
@@ -68,7 +68,17 @@ const MainNavigator: React.FC = () => {
   // In-app alert banner
   const [newSaleAlert, setNewSaleAlert] = useState<NewSaleAlert | null>(null);
 
-  // Setup Android Notification Channel and permissions
+  // Safe Android Navigation Bar Auto-Hide
+  const hideAndroidNavBar = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        await NavigationBar.setVisibilityAsync('hidden').catch(() => {});
+        await NavigationBar.setBehaviorAsync('overlay-swipe').catch(() => {});
+      } catch (_e) {}
+    }
+  };
+
+  // Setup Android Notification Channel and permissions safely
   useEffect(() => {
     const setupNotifications = async () => {
       try {
@@ -81,49 +91,36 @@ const MainNavigator: React.FC = () => {
             sound: 'default',
             enableVibrate: true,
             showBadge: true,
-          });
+          }).catch((err) => console.warn('setNotificationChannel error:', err));
         }
-        await Notifications.requestPermissionsAsync();
+        await Notifications.requestPermissionsAsync().catch(() => {});
       } catch (e) {
         console.warn('Error configurando notificaciones:', e);
       }
     };
 
     setupNotifications();
-  }, []);
-
-  // Auto-hide Android bottom navigation bar (3 buttons) in immersive mode
-  useEffect(() => {
-    const hideNavBar = () => {
-      if (Platform.OS === 'android') {
-        try {
-          NavigationBar.setVisibilityAsync('hidden');
-          NavigationBar.setBehaviorAsync('overlay-swipe');
-        } catch (_e) {}
-      }
-    };
-
-    hideNavBar();
+    hideAndroidNavBar();
 
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        hideNavBar();
+        hideAndroidNavBar();
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [currentTab, user]);
+  }, [user]);
 
   // Recalculate pending sales count accurately
   const refreshPendingCount = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('ventas')
         .select('id, culqi_charge_id, comprobante_emitido, estado');
 
-      if (data) {
+      if (!error && data) {
         const pending = data.filter(
           (v: any) =>
             !v.comprobante_emitido &&
@@ -152,7 +149,7 @@ const MainNavigator: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'ventas' },
         async (payload: any) => {
           const newVenta = payload.new;
-          console.log('⚡ Nueva venta recibida en tiempo real:', newVenta);
+          if (!newVenta) return;
 
           refreshPendingCount();
 
@@ -161,7 +158,7 @@ const MainNavigator: React.FC = () => {
             await Notifications.scheduleNotificationAsync({
               content: {
                 title: '🔔 ¡Nueva Venta por Confirmar!',
-                body: `${newVenta.nombres || 'Pasajero'} reservó Asiento #${newVenta.numero_asiento} (S/ ${Number(
+                body: `${newVenta.nombres || 'Pasajero'} reservó Asiento #${newVenta.numero_asiento || ''} (S/ ${Number(
                   newVenta.monto_pagado || 50
                 ).toFixed(2)}) vía ${newVenta.metodo_pago || 'YAPE'}`,
                 sound: 'default',
@@ -169,22 +166,22 @@ const MainNavigator: React.FC = () => {
                 priority: Notifications.AndroidNotificationPriority.MAX,
               },
               trigger: null,
-            });
+            }).catch((err) => console.warn('scheduleNotification error:', err));
           } catch (e) {
             console.warn('Error enviando notificación push:', e);
           }
 
-          // Trigger Haptic Vibration Chime
+          // Trigger Haptic Vibration
           try {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           } catch (_e) {}
 
           // Show floating in-app banner
           setNewSaleAlert({
             id: newVenta.id,
-            nombres: newVenta.nombres,
-            apellidos: newVenta.apellidos,
-            asiento: newVenta.numero_asiento,
+            nombres: newVenta.nombres || 'Cliente',
+            apellidos: newVenta.apellidos || '',
+            asiento: newVenta.numero_asiento || 1,
             monto: Number(newVenta.monto_pagado || 50),
             metodo: newVenta.metodo_pago || 'YAPE',
           });
@@ -194,7 +191,6 @@ const MainNavigator: React.FC = () => {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'ventas' },
         () => {
-          console.log('⚡ Venta actualizada (confirmada/rechazada)');
           refreshPendingCount();
         }
       )
@@ -202,7 +198,6 @@ const MainNavigator: React.FC = () => {
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'ventas' },
         () => {
-          console.log('⚡ Venta eliminada');
           refreshPendingCount();
         }
       )
@@ -285,7 +280,7 @@ const MainNavigator: React.FC = () => {
           style={styles.tabButton}
           onPress={() => {
             setCurrentTab('DASHBOARD');
-            Haptics.selectionAsync();
+            Haptics.selectionAsync().catch(() => {});
           }}
         >
           <LayoutDashboard
@@ -307,7 +302,7 @@ const MainNavigator: React.FC = () => {
           style={styles.tabButton}
           onPress={() => {
             setCurrentTab('SALES');
-            Haptics.selectionAsync();
+            Haptics.selectionAsync().catch(() => {});
           }}
         >
           <View>
@@ -336,7 +331,7 @@ const MainNavigator: React.FC = () => {
           style={styles.centerFab}
           onPress={() => {
             setIsDirectSaleOpen(true);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
           }}
         >
           <ShoppingBag size={24} color="#FFF" />
@@ -348,7 +343,7 @@ const MainNavigator: React.FC = () => {
           style={styles.tabButton}
           onPress={() => {
             setCurrentTab('TRIPS');
-            Haptics.selectionAsync();
+            Haptics.selectionAsync().catch(() => {});
           }}
         >
           <Armchair
@@ -370,7 +365,7 @@ const MainNavigator: React.FC = () => {
           style={styles.tabButton}
           onPress={() => {
             setCurrentTab('ACCOUNTING');
-            Haptics.selectionAsync();
+            Haptics.selectionAsync().catch(() => {});
           }}
         >
           <FileSpreadsheet
@@ -400,9 +395,7 @@ const MainNavigator: React.FC = () => {
       <CreateTripModal
         visible={isCreateTripOpen}
         onClose={() => setIsCreateTripOpen(false)}
-        onTripCreated={() => {
-          // Refresh trigger
-        }}
+        onTripCreated={() => {}}
       />
     </SafeAreaView>
   );
