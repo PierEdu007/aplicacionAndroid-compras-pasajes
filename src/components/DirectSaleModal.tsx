@@ -116,7 +116,6 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         const first = trips[0];
         const routeKey = `${first.rutas?.origen}-${first.rutas?.destino}`;
         setSelectedRouteKey(routeKey);
-        setSelectedTime(first.hora_viaje.substring(0, 5));
       }
     } catch (e) {
       console.error('Error cargando salidas:', e);
@@ -128,14 +127,23 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     new Set(allViajes.map((v) => `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`))
   );
 
-  // Find available hours for selected date & route
+  const nowPeru = getPeruDate();
+  const currentHourStr = `${String(nowPeru.getHours()).padStart(2, '0')}:${String(nowPeru.getMinutes()).padStart(2, '0')}`;
+  const isToday = selectedDate === getPeruTodayString();
+
+  // Find available hours for selected date & route (only future hours if today)
   const availableHours = Array.from(
     new Set(
       allViajes
         .filter((v) => {
           const rStr = `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`;
           const matchRoute = !selectedRouteKey || rStr === selectedRouteKey;
-          return v.fecha_viaje === selectedDate && matchRoute;
+          const matchDate = v.fecha_viaje === selectedDate;
+          if (isToday) {
+            const h = v.hora_viaje.substring(0, 5);
+            return matchRoute && matchDate && h > currentHourStr;
+          }
+          return matchRoute && matchDate;
         })
         .map((v) => v.hora_viaje.substring(0, 5))
     )
