@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tunky Chasky Admin",
     "slug": "tunky-chasky-admin",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "pe.com.turismotunkychasky.admin",
-      "versionCode": 6,
+      "versionCode": 7,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#742284"
@@ -26,7 +26,6 @@
       "permissions": [
         "INTERNET",
         "VIBRATE",
-        "POST_NOTIFICATIONS",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ]
@@ -42,8 +41,7 @@
     "plugins": [
       "expo-secure-store",
       "expo-sharing",
-      "expo-navigation-bar",
-      "expo-notifications"
+      "expo-navigation-bar"
     ]
   }
 }

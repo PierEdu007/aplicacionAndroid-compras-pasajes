@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,6 @@ import { CreateTripModal } from './src/components/CreateTripModal';
 import { supabase } from './src/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
-import * as Notifications from 'expo-notifications';
 import {
   LayoutDashboard,
   CreditCard,
@@ -32,19 +31,51 @@ import {
   Bell,
   ArrowRight,
   X,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react-native';
 
-// Safe notification handler initialization
-try {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
-} catch (err) {
-  console.warn('NotificationHandler init skipped:', err);
+// Error Boundary to prevent crashes
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ErrorBoundary caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={styles.errorContainer}>
+          <AlertTriangle size={48} color={THEME.colors.warning} />
+          <Text style={styles.errorTitle}>Ocurrió un inconveniente</Text>
+          <Text style={styles.errorDetails}>
+            {this.state.error?.message || 'Error inesperado'}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <RefreshCw size={18} color="#FFF" />
+            <Text style={styles.retryBtnText}>Reintentar</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 type TabType = 'DASHBOARD' | 'SALES' | 'TRIPS' | 'ACCOUNTING';
@@ -78,28 +109,7 @@ const MainNavigator: React.FC = () => {
     }
   };
 
-  // Setup Android Notification Channel and permissions safely
   useEffect(() => {
-    const setupNotifications = async () => {
-      try {
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('ventas-alertas', {
-            name: 'Alertas de Ventas',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 300, 200, 300],
-            lightColor: '#742284',
-            sound: 'default',
-            enableVibrate: true,
-            showBadge: true,
-          }).catch((err) => console.warn('setNotificationChannel error:', err));
-        }
-        await Notifications.requestPermissionsAsync().catch(() => {});
-      } catch (e) {
-        console.warn('Error configurando notificaciones:', e);
-      }
-    };
-
-    setupNotifications();
     hideAndroidNavBar();
 
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -147,38 +157,21 @@ const MainNavigator: React.FC = () => {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'ventas' },
-        async (payload: any) => {
+        (payload: any) => {
           const newVenta = payload.new;
           if (!newVenta) return;
 
+          console.log('⚡ Nueva venta recibida en tiempo real:', newVenta);
           refreshPendingCount();
 
-          // Trigger System Push Notification with Sound & Vibration
+          // Trigger Haptic Vibration pattern
           try {
-            await Notifications.scheduleNotificationAsync({
-              content: {
-                title: '🔔 ¡Nueva Venta por Confirmar!',
-                body: `${newVenta.nombres || 'Pasajero'} reservó Asiento #${newVenta.numero_asiento || ''} (S/ ${Number(
-                  newVenta.monto_pagado || 50
-                ).toFixed(2)}) vía ${newVenta.metodo_pago || 'YAPE'}`,
-                sound: 'default',
-                channelId: 'ventas-alertas',
-                priority: Notifications.AndroidNotificationPriority.MAX,
-              },
-              trigger: null,
-            }).catch((err) => console.warn('scheduleNotification error:', err));
-          } catch (e) {
-            console.warn('Error enviando notificación push:', e);
-          }
-
-          // Trigger Haptic Vibration
-          try {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           } catch (_e) {}
 
           // Show floating in-app banner
           setNewSaleAlert({
-            id: newVenta.id,
+            id: newVenta.id || String(Date.now()),
             nombres: newVenta.nombres || 'Cliente',
             apellidos: newVenta.apellidos || '',
             asiento: newVenta.numero_asiento || 1,
@@ -403,9 +396,11 @@ const MainNavigator: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainNavigator />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <MainNavigator />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -541,5 +536,39 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     marginTop: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.background,
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: THEME.colors.textPrimary,
+    marginTop: 16,
+  },
+  errorDetails: {
+    fontSize: 12,
+    color: THEME.colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 20,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: THEME.colors.primary,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  retryBtnText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 14,
   },
 });
