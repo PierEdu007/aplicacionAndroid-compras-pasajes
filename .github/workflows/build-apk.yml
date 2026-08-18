@@ -59,18 +59,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.4
-          name: Tunky Chasky Admin v1.0.4 (Filtro de Horas Pasadas y Sincronización)
+          tag_name: v1.0.5
+          name: Tunky Chasky Admin v1.0.5 (Notificaciones con Sonido, Vibración y Contador en Vivo)
           body: |
-            ## 📱 Tunky Chasky Admin v1.0.4
+            ## 📱 Tunky Chasky Admin v1.0.5
             
             ### 📥 Descarga Directa:
             Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### ✨ Novedades v1.0.4:
-            - **Filtro Inteligente de Horas Pasadas**: Si buscas viajes para hoy, solo se muestran los horarios que aún no han salido en hora de Perú (UTC-5).
-            - **Venta Presencial Optimizada**: Asiento #1 Conductor no seleccionable, selección de tipo de unidad y asientos reales actualizados.
-            - **Modo Inmersivo Permanente**: Los 3 botones de Android se mantienen ocultos automáticamente.
+            ### ✨ Novedades v1.0.5:
+            - **🔔 Notificaciones Push del Sistema con Sonido y Vibración**: Al recibir una nueva venta de la web, Android emite el sonido de alerta y vibra.
+            - **Banner Flotante en Pantalla**: Muestra el nombre del pasajero, asiento y monto con botón directo "Ver y Confirmar".
+            - **Contador Rojo Dinámico**: La burbuja de "Ventas" ahora **disminuye y se actualiza en tiempo real** automáticamente al confirmar o rechazar cada pago.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

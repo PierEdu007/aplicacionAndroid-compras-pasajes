@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Platform,
   AppState,
+  Animated,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { THEME } from './src/constants/theme';
@@ -22,6 +23,7 @@ import { CreateTripModal } from './src/components/CreateTripModal';
 import { supabase } from './src/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import * as NavigationBar from 'expo-navigation-bar';
+import * as Notifications from 'expo-notifications';
 import {
   LayoutDashboard,
   CreditCard,
@@ -29,9 +31,32 @@ import {
   FileSpreadsheet,
   Plus,
   ShoppingBag,
+  Bell,
+  ArrowRight,
+  X,
 } from 'lucide-react-native';
 
+// Set notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldSetBanner: true,
+    shouldSetList: true,
+  }),
+});
+
 type TabType = 'DASHBOARD' | 'SALES' | 'TRIPS' | 'ACCOUNTING';
+
+interface NewSaleAlert {
+  id: string;
+  nombres: string;
+  apellidos: string;
+  asiento: number;
+  monto: number;
+  metodo: string;
+}
 
 const MainNavigator: React.FC = () => {
   const { user, loading, isContador, isVendedor, isAdmin } = useAuth();
@@ -39,6 +64,33 @@ const MainNavigator: React.FC = () => {
   const [isDirectSaleOpen, setIsDirectSaleOpen] = useState(false);
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [pendingBadgeCount, setPendingBadgeCount] = useState(0);
+
+  // In-app alert banner
+  const [newSaleAlert, setNewSaleAlert] = useState<NewSaleAlert | null>(null);
+
+  // Setup Android Notification Channel and permissions
+  useEffect(() => {
+    const setupNotifications = async () => {
+      try {
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('ventas-alertas', {
+            name: 'Alertas de Ventas',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 300, 200, 300],
+            lightColor: '#742284',
+            sound: 'default',
+            enableVibrate: true,
+            showBadge: true,
+          });
+        }
+        await Notifications.requestPermissionsAsync();
+      } catch (e) {
+        console.warn('Error configurando notificaciones:', e);
+      }
+    };
+
+    setupNotifications();
+  }, []);
 
   // Auto-hide Android bottom navigation bar (3 buttons) in immersive mode
   useEffect(() => {
@@ -64,32 +116,94 @@ const MainNavigator: React.FC = () => {
     };
   }, [currentTab, user]);
 
-  // Supabase Realtime Listener for new incoming sales from Web
+  // Recalculate pending sales count accurately
+  const refreshPendingCount = async () => {
+    try {
+      const { data } = await supabase
+        .from('ventas')
+        .select('id, culqi_charge_id, comprobante_emitido, estado');
+
+      if (data) {
+        const pending = data.filter(
+          (v: any) =>
+            !v.comprobante_emitido &&
+            v.estado !== 'CONFIRMADO' &&
+            v.estado !== 'RECHAZADO' &&
+            !v.culqi_charge_id?.startsWith('RECHAZADO_')
+        );
+        setPendingBadgeCount(pending.length);
+      }
+    } catch (e) {
+      console.warn('Error actualizando contador de ventas:', e);
+    }
+  };
+
+  // Supabase Realtime Listener for new incoming sales, confirmations, and rejections
   useEffect(() => {
     if (!user) return;
 
-    // Load initial pending count
-    const loadInitialPending = async () => {
-      const { data } = await supabase
-        .from('ventas')
-        .select('id')
-        .eq('comprobante_emitido', false);
+    refreshPendingCount();
 
-      if (data) setPendingBadgeCount(data.length);
-    };
-
-    loadInitialPending();
-
-    // Subscribe to new sales in realtime
+    // Subscribe to all changes on ventas table in realtime
     const channel = supabase
-      .channel('android-admin-realtime')
+      .channel('android-admin-ventas-sync')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'ventas' },
-        (payload) => {
-          console.log('⚡ Nueva venta recibida en tiempo real:', payload);
-          setPendingBadgeCount((prev) => prev + 1);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        async (payload: any) => {
+          const newVenta = payload.new;
+          console.log('⚡ Nueva venta recibida en tiempo real:', newVenta);
+
+          refreshPendingCount();
+
+          // Trigger System Push Notification with Sound & Vibration
+          try {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: '🔔 ¡Nueva Venta por Confirmar!',
+                body: `${newVenta.nombres || 'Pasajero'} reservó Asiento #${newVenta.numero_asiento} (S/ ${Number(
+                  newVenta.monto_pagado || 50
+                ).toFixed(2)}) vía ${newVenta.metodo_pago || 'YAPE'}`,
+                sound: 'default',
+                channelId: 'ventas-alertas',
+                priority: Notifications.AndroidNotificationPriority.MAX,
+              },
+              trigger: null,
+            });
+          } catch (e) {
+            console.warn('Error enviando notificación push:', e);
+          }
+
+          // Trigger Haptic Vibration Chime
+          try {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } catch (_e) {}
+
+          // Show floating in-app banner
+          setNewSaleAlert({
+            id: newVenta.id,
+            nombres: newVenta.nombres,
+            apellidos: newVenta.apellidos,
+            asiento: newVenta.numero_asiento,
+            monto: Number(newVenta.monto_pagado || 50),
+            metodo: newVenta.metodo_pago || 'YAPE',
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'ventas' },
+        () => {
+          console.log('⚡ Venta actualizada (confirmada/rechazada)');
+          refreshPendingCount();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'ventas' },
+        () => {
+          console.log('⚡ Venta eliminada');
+          refreshPendingCount();
         }
       )
       .subscribe();
@@ -115,6 +229,37 @@ const MainNavigator: React.FC = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={THEME.colors.primary} />
+
+      {/* Floating Realtime Sale Alert Banner */}
+      {newSaleAlert && (
+        <View style={styles.floatingAlertBanner}>
+          <View style={styles.alertIconCircle}>
+            <Bell size={18} color="#FFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.alertTitle}>¡Nueva Venta Recibida!</Text>
+            <Text style={styles.alertSubtitle}>
+              {newSaleAlert.nombres} {newSaleAlert.apellidos} • Asiento #{newSaleAlert.asiento} (S/ {newSaleAlert.monto.toFixed(2)})
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.alertActionBtn}
+            onPress={() => {
+              setNewSaleAlert(null);
+              setCurrentTab('SALES');
+            }}
+          >
+            <Text style={styles.alertActionText}>Ver</Text>
+            <ArrowRight size={14} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.alertCloseBtn}
+            onPress={() => setNewSaleAlert(null)}
+          >
+            <X size={16} color="#FFF" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Screen Content */}
       <View style={styles.contentContainer}>
@@ -248,7 +393,7 @@ const MainNavigator: React.FC = () => {
         visible={isDirectSaleOpen}
         onClose={() => setIsDirectSaleOpen(false)}
         onSaleComplete={() => {
-          // Refresh trigger
+          refreshPendingCount();
         }}
       />
 
@@ -291,6 +436,57 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     backgroundColor: THEME.colors.background,
+  },
+  floatingAlertBanner: {
+    position: 'absolute',
+    top: 50,
+    left: 16,
+    right: 16,
+    zIndex: 9999,
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: THEME.colors.primary,
+    ...THEME.shadows.lg,
+  },
+  alertIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: THEME.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertTitle: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  alertSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  alertActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: THEME.colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  alertActionText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  alertCloseBtn: {
+    padding: 4,
   },
   bottomBar: {
     flexDirection: 'row',
