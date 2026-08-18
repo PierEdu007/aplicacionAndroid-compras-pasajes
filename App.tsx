@@ -20,6 +20,7 @@ import { DirectSaleModal } from './src/components/DirectSaleModal';
 import { CreateTripModal } from './src/components/CreateTripModal';
 import { supabase } from './src/lib/supabase';
 import * as Haptics from 'expo-haptics';
+import * as NavigationBar from 'expo-navigation-bar';
 import {
   LayoutDashboard,
   CreditCard,
@@ -37,6 +38,16 @@ const MainNavigator: React.FC = () => {
   const [isDirectSaleOpen, setIsDirectSaleOpen] = useState(false);
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [pendingBadgeCount, setPendingBadgeCount] = useState(0);
+
+  // Auto-hide Android bottom navigation bar (3 buttons) in immersive mode
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      try {
+        NavigationBar.setVisibilityAsync('hidden');
+        NavigationBar.setBehaviorAsync('overlay-swipe');
+      } catch (_e) {}
+    }
+  }, [currentTab, user]);
 
   // Supabase Realtime Listener for new incoming sales from Web
   useEffect(() => {
@@ -271,10 +282,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     backgroundColor: THEME.colors.surface,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'android' ? 12 : 8,
     borderTopWidth: 1,
     borderTopColor: THEME.colors.border,
-    height: 64,
+    height: 68,
     ...THEME.shadows.lg,
   },
   tabButton: {

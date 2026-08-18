@@ -59,17 +59,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.1
-          name: Tunky Chasky Admin v1.0.1 (APK Release Offline)
+          tag_name: v1.0.2
+          name: Tunky Chasky Admin v1.0.2 (Modo Inmersivo / Ocultar Botones Android)
           body: |
-            ## 📱 Tunky Chasky Admin v1.0.1 (APK Release 100% Offline)
+            ## 📱 Tunky Chasky Admin v1.0.2 (Modo Inmersivo)
             
             ### 📥 Descarga Directa:
             Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### 🛠️ Corrección:
-            - Empaquetado completo de JavaScript y Assets en modo Release (no requiere Metro ni servidor de desarrollo).
-            - Funciona de forma 100% independiente en cualquier celular Android.
+            ### ✨ Novedades v1.0.2:
+            - **Modo Inmersivo Total**: Los 3 botones inferiores de Android (Atrás, Inicio, Tareas) se ocultan automáticamente al entrar a la app para aprovechar toda la pantalla.
+            - Barra de navegación inferior con espacio optimizado para tocar cómodamente los apartados.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
