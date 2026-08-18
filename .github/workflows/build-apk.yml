@@ -1,0 +1,73 @@
+name: Compilar APK Android Tunky Chasky
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ☕ Configurar Java 17 (JDK)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias npm
+        run: npm ci || npm install
+
+      - name: ⚙️ Configurar permisos de Gradle
+        run: chmod +x android/gradlew
+
+      - name: 🔨 Compilar APK Release
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon
+
+      - name: 📦 Renombrar APK
+        run: |
+          mkdir -p build-output
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/release/*.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/debug/*.apk build-output/TunkyChaskyAdmin.apk
+
+      - name: 📤 Subir APK como Artefacto de Descarga
+        uses: actions/upload-artifact@v4
+        with:
+          name: TunkyChaskyAdmin-APK
+          path: build-output/TunkyChaskyAdmin.apk
+          retention-days: 30
+
+      - name: 🚀 Publicar Release con Enlace de Descarga Directa
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/heads/main')
+        with:
+          tag_name: v1.0.0
+          name: Tunky Chasky Admin v1.0.0 (APK Android)
+          body: |
+            ## 📱 Aplicación Android Oficial Tunky Chasky Admin v1.0.0
+            
+            ### 📥 Descarga Directa:
+            Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu celular Android.
+            
+            ### ✨ Novedades:
+            - Sincronización en tiempo real con la página web
+            - Venta presencial de pasajes en mostrador (Cusco / Quillabamba)
+            - Consulta automática de DNI con RENIEC y RUC con SUNAT
+            - Emisión de Boletas (`BBB1`) y Facturas (`FFF1`) oficiales con NubeFact
+            - Generación e impresión térmica de boletos de viaje
+            - Reportes de liquidación tributaria (IGV y Renta 1%)
+          files: build-output/TunkyChaskyAdmin.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
