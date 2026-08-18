@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Android APK
@@ -27,20 +30,23 @@ jobs:
           cache: 'npm'
 
       - name: 📦 Instalar dependencias npm
-        run: npm ci || npm install
+        run: npm install --legacy-peer-deps
+
+      - name: 🏗️ Generar proyecto nativo Android (Prebuild)
+        run: npx expo prebuild --platform android --no-install
 
       - name: ⚙️ Configurar permisos de Gradle
         run: chmod +x android/gradlew
 
-      - name: 🔨 Compilar APK Release
+      - name: 🔨 Compilar APK Debug e Release
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleDebug --no-daemon
 
-      - name: 📦 Renombrar APK
+      - name: 📦 Preparar APK para descarga
         run: |
           mkdir -p build-output
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/release/*.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/debug/*.apk build-output/TunkyChaskyAdmin.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/TunkyChaskyAdmin.apk
 
       - name: 📤 Subir APK como Artefacto de Descarga
         uses: actions/upload-artifact@v4
@@ -59,9 +65,9 @@ jobs:
             ## 📱 Aplicación Android Oficial Tunky Chasky Admin v1.0.0
             
             ### 📥 Descarga Directa:
-            Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu celular Android.
+            Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### ✨ Novedades:
+            ### ✨ Características:
             - Sincronización en tiempo real con la página web
             - Venta presencial de pasajes en mostrador (Cusco / Quillabamba)
             - Consulta automática de DNI con RENIEC y RUC con SUNAT
