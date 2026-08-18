@@ -55,7 +55,7 @@ export const TripsScreen: React.FC = () => {
         .order('hora_viaje', { ascending: true });
 
       if (error) throw error;
-      setViajes(data || []);
+      setViajes((data as any) || []);
     } catch (e: any) {
       console.error('Error cargando viajes:', e);
       Alert.alert('Error', 'No se pudieron cargar los viajes.');

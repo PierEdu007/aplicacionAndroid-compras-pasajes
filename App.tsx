@@ -103,8 +103,8 @@ const MainNavigator: React.FC = () => {
   const hideAndroidNavBar = async () => {
     if (Platform.OS === 'android') {
       try {
-        await NavigationBar.setVisibilityAsync('hidden').catch(() => {});
-        await NavigationBar.setBehaviorAsync('overlay-swipe').catch(() => {});
+        await (NavigationBar as any).setVisibilityAsync?.('hidden')?.catch?.(() => {});
+        await (NavigationBar as any).setBehaviorAsync?.('overlay-swipe')?.catch?.(() => {});
       } catch (_e) {}
     }
   };

@@ -17,7 +17,7 @@ import { lookupDni, lookupRuc } from '../services/reniecSunatService';
 import { emitirComprobanteSunat } from '../services/sunatService';
 import { sendConfirmationEmail } from '../services/emailService';
 import { generateAndShareTicket } from '../services/ticketPdfService';
-import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay } from '../utils/dateHelper';
+import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay, getPeruDate } from '../utils/dateHelper';
 import {
   X,
   Search,
@@ -163,7 +163,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       const matchRoute = rStr === selectedRouteKey;
       const matchDate = v.fecha_viaje === selectedDate;
       const matchTime = v.hora_viaje.substring(0, 5) === selectedTime;
-      const is6P = v.vehiculos?.nombre_display?.includes('6') || v.vehiculos?.tipo?.includes('6');
+      const is6P = v.vehiculos?.nombre_display?.includes('6') || (v.vehiculos as any)?.tipo?.includes('6');
       const matchVehicle = selectedVehicleType === '6P' ? is6P : !is6P;
 
       return matchRoute && matchDate && matchTime && matchVehicle;
