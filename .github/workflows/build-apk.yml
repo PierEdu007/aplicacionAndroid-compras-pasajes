@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Android Standalone Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -38,15 +38,15 @@ jobs:
       - name: ⚙️ Configurar permisos de Gradle
         run: chmod +x android/gradlew
 
-      - name: 🔨 Compilar APK Debug e Release
+      - name: 🔨 Compilar APK Standalone Release (Empaquetado Offline)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
       - name: 📦 Preparar APK para descarga
         run: |
           mkdir -p build-output
-          cp android/app/build/outputs/apk/debug/app-debug.apk build-output/TunkyChaskyAdmin.apk
+          cp android/app/build/outputs/apk/release/app-release.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/release/*.apk build-output/TunkyChaskyAdmin.apk
 
       - name: 📤 Subir APK como Artefacto de Descarga
         uses: actions/upload-artifact@v4
@@ -59,21 +59,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.0
-          name: Tunky Chasky Admin v1.0.0 (APK Android)
+          tag_name: v1.0.1
+          name: Tunky Chasky Admin v1.0.1 (APK Release Offline)
           body: |
-            ## 📱 Aplicación Android Oficial Tunky Chasky Admin v1.0.0
+            ## 📱 Tunky Chasky Admin v1.0.1 (APK Release 100% Offline)
             
             ### 📥 Descarga Directa:
             Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### ✨ Características:
-            - Sincronización en tiempo real con la página web
-            - Venta presencial de pasajes en mostrador (Cusco / Quillabamba)
-            - Consulta automática de DNI con RENIEC y RUC con SUNAT
-            - Emisión de Boletas (`BBB1`) y Facturas (`FFF1`) oficiales con NubeFact
-            - Generación e impresión térmica de boletos de viaje
-            - Reportes de liquidación tributaria (IGV y Renta 1%)
+            ### 🛠️ Corrección:
+            - Empaquetado completo de JavaScript y Assets en modo Release (no requiere Metro ni servidor de desarrollo).
+            - Funciona de forma 100% independiente en cualquier celular Android.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
