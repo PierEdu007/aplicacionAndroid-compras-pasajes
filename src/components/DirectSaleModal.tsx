@@ -12,12 +12,28 @@ import {
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Viaje, TipoDocumento } from '../types/database';
-import { supabase, API_BASE_URL } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { lookupDni, lookupRuc } from '../services/reniecSunatService';
 import { emitirComprobanteSunat } from '../services/sunatService';
 import { sendConfirmationEmail } from '../services/emailService';
 import { generateAndShareTicket } from '../services/ticketPdfService';
-import { X, Search, CheckCircle, CreditCard, Banknote, QrCode } from 'lucide-react-native';
+import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay } from '../utils/dateHelper';
+import {
+  X,
+  Search,
+  CheckCircle,
+  CreditCard,
+  Banknote,
+  QrCode,
+  MapPin,
+  Calendar,
+  Clock,
+  Car,
+  User,
+  Phone,
+  Mail,
+  Armchair,
+} from 'lucide-react-native';
 
 interface DirectSaleModalProps {
   visible: boolean;
@@ -31,12 +47,24 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
   onSaleComplete,
 }) => {
   const [loading, setLoading] = useState(false);
-  const [viajes, setViajes] = useState<Viaje[]>([]);
-  const [selectedViajeId, setSelectedViajeId] = useState('');
-  const [availableSeats, setAvailableSeats] = useState<number[]>([]);
+  const [allViajes, setAllViajes] = useState<Viaje[]>([]);
+
+  // Step 1: Filters (Fecha, Ruta, Hora)
+  const [selectedDate, setSelectedDate] = useState(getPeruTodayString());
+  const [selectedRouteKey, setSelectedRouteKey] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
+
+  // Step 2: Vehicle selection (4P vs 6P)
+  const [selectedVehicleType, setSelectedVehicleType] = useState<'4P' | '6P'>('4P');
+
+  // Active matched trip
+  const [activeTrip, setActiveTrip] = useState<Viaje | null>(null);
+
+  // Step 3: Seat selection
+  const [occupiedSeats, setOccupiedSeats] = useState<Set<number>>(new Set());
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
 
-  // Passenger form
+  // Step 4: Passenger form
   const [tipoDoc, setTipoDoc] = useState<TipoDocumento>('DNI');
   const [nroDoc, setNroDoc] = useState('');
   const [nombres, setNombres] = useState('');
@@ -45,88 +73,144 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
   const [direccionFiscal, setDireccionFiscal] = useState('');
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
+
+  // Step 5: Payment method
   const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'YAPE' | 'TARJETA'>('EFECTIVO');
   const [codigoOpYape, setCodigoOpYape] = useState('');
   const [lookingUpDoc, setLookingUpDoc] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      loadActiveTrips();
+      setSelectedDate(getPeruTodayString());
+      loadTrips();
     }
   }, [visible]);
 
-  useEffect(() => {
-    if (selectedViajeId) {
-      loadAvailableSeats(selectedViajeId);
-    } else {
-      setAvailableSeats([]);
-      setSelectedSeat(null);
-    }
-  }, [selectedViajeId]);
-
-  const loadActiveTrips = async () => {
+  const loadTrips = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const { data } = await supabase
+      const today = getPeruTodayString();
+      const { data, error } = await supabase
         .from('viajes')
         .select(`
           id,
+          ruta_id,
+          vehiculo_id,
           fecha_viaje,
           hora_viaje,
           precio_base,
-          rutas (origen, destino),
-          vehiculos (nombre_display, total_asientos_pasajero)
+          estado,
+          rutas (id, origen, destino),
+          vehiculos (id, nombre_display, total_asientos_pasajero, tipo)
         `)
         .eq('estado', 'ACTIVO')
         .gte('fecha_viaje', today)
         .order('fecha_viaje', { ascending: true })
         .order('hora_viaje', { ascending: true });
 
-      if (data && data.length > 0) {
-        setViajes(data as any);
-        setSelectedViajeId(data[0].id);
+      if (error) throw error;
+
+      const trips: Viaje[] = (data as any) || [];
+      setAllViajes(trips);
+
+      if (trips.length > 0) {
+        const first = trips[0];
+        const routeKey = `${first.rutas?.origen}-${first.rutas?.destino}`;
+        setSelectedRouteKey(routeKey);
+        setSelectedTime(first.hora_viaje.substring(0, 5));
       }
     } catch (e) {
-      console.error('Error cargando viajes:', e);
+      console.error('Error cargando salidas:', e);
     }
   };
 
-  const loadAvailableSeats = async (viajeId: string) => {
+  // Find unique routes available
+  const availableRoutes = Array.from(
+    new Set(allViajes.map((v) => `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`))
+  );
+
+  // Find available hours for selected date & route
+  const availableHours = Array.from(
+    new Set(
+      allViajes
+        .filter((v) => {
+          const rStr = `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`;
+          const matchRoute = !selectedRouteKey || rStr === selectedRouteKey;
+          return v.fecha_viaje === selectedDate && matchRoute;
+        })
+        .map((v) => v.hora_viaje.substring(0, 5))
+    )
+  );
+
+  // Match the specific trip when route, date, time, and vehicle type are selected
+  useEffect(() => {
+    if (!selectedRouteKey && availableRoutes.length > 0) {
+      setSelectedRouteKey(availableRoutes[0]);
+    }
+    if (!selectedTime && availableHours.length > 0) {
+      setSelectedTime(availableHours[0]);
+    }
+
+    const matched = allViajes.find((v) => {
+      const rStr = `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`;
+      const matchRoute = rStr === selectedRouteKey;
+      const matchDate = v.fecha_viaje === selectedDate;
+      const matchTime = v.hora_viaje.substring(0, 5) === selectedTime;
+      const is6P = v.vehiculos?.nombre_display?.includes('6') || v.vehiculos?.tipo?.includes('6');
+      const matchVehicle = selectedVehicleType === '6P' ? is6P : !is6P;
+
+      return matchRoute && matchDate && matchTime && matchVehicle;
+    });
+
+    setActiveTrip(matched || null);
+    setSelectedSeat(null);
+
+    if (matched) {
+      loadOccupiedSeats(matched.id);
+    } else {
+      setOccupiedSeats(new Set());
+    }
+  }, [selectedDate, selectedRouteKey, selectedTime, selectedVehicleType, allViajes]);
+
+  const loadOccupiedSeats = async (viajeId: string) => {
     try {
-      const viaje = viajes.find((v) => v.id === viajeId);
-      const totalSeats = viaje?.vehiculos?.total_asientos_pasajero || 4;
+      const [{ data: ventas }, { data: bloqueos }] = await Promise.all([
+        supabase.from('ventas').select('numero_asiento, culqi_charge_id').eq('viaje_id', viajeId),
+        supabase.from('asientos_bloqueos').select('numero_asiento, estado, expira_at').eq('viaje_id', viajeId),
+      ]);
 
-      const { data: ventas } = await supabase
-        .from('ventas')
-        .select('numero_asiento, culqi_charge_id')
-        .eq('viaje_id', viajeId);
+      const occupied = new Set<number>();
 
-      const soldSeats = new Set(
-        ventas?.filter((v) => !v.culqi_charge_id?.startsWith('RECHAZADO_')).map((v) => v.numero_asiento) || []
-      );
+      // 1. Seat 1 is ALWAYS Conductor (driver) - never selectable
+      occupied.add(1);
 
-      const free: number[] = [];
-      for (let i = 1; i <= totalSeats; i++) {
-        if (!soldSeats.has(i)) {
-          free.push(i);
+      // 2. Ventas confirmadas
+      ventas?.forEach((v: any) => {
+        if (!v.culqi_charge_id?.startsWith('RECHAZADO_')) {
+          occupied.add(v.numero_asiento);
         }
-      }
+      });
 
-      setAvailableSeats(free);
-      if (free.length > 0) {
-        setSelectedSeat(free[0]);
-      } else {
-        setSelectedSeat(null);
-      }
+      // 3. Bloqueos activos
+      const now = new Date();
+      bloqueos?.forEach((b: any) => {
+        if (b.estado === 'PAGADO') {
+          occupied.add(b.numero_asiento);
+        } else if (b.estado === 'BLOQUEADO' && new Date(b.expira_at) > now) {
+          occupied.add(b.numero_asiento);
+        }
+      });
+
+      setOccupiedSeats(occupied);
     } catch (e) {
-      console.error('Error cargando asientos:', e);
+      console.error('Error cargando asientos ocupados:', e);
     }
   };
 
   const handleLookupDoc = async () => {
-    if (tipoDoc === 'DNI' && nroDoc.length === 8) {
+    const clean = nroDoc.trim().replace(/\D/g, '');
+    if (tipoDoc === 'DNI' && clean.length === 8) {
       setLookingUpDoc(true);
-      const res = await lookupDni(nroDoc);
+      const res = await lookupDni(clean);
       setLookingUpDoc(false);
       if (res && res.nombres) {
         setNombres(res.nombres);
@@ -134,9 +218,9 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       } else {
         Alert.alert('Aviso', 'DNI no encontrado en RENIEC. Ingrese los nombres manualmente.');
       }
-    } else if (tipoDoc === 'RUC' && nroDoc.length === 11) {
+    } else if (tipoDoc === 'RUC' && clean.length === 11) {
       setLookingUpDoc(true);
-      const res = await lookupRuc(nroDoc);
+      const res = await lookupRuc(clean);
       setLookingUpDoc(false);
       if (res && res.razonSocial) {
         setRazonSocial(res.razonSocial);
@@ -144,12 +228,19 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       } else {
         Alert.alert('Aviso', 'RUC no encontrado en SUNAT. Ingrese los datos manualmente.');
       }
+    } else {
+      Alert.alert('Formato inválido', `El ${tipoDoc} debe tener ${tipoDoc === 'DNI' ? '8' : '11'} dígitos numéricos.`);
     }
   };
 
   const handleProcessSale = async () => {
-    if (!selectedViajeId || !selectedSeat) {
-      Alert.alert('Error', 'Selecciona un viaje y un asiento disponible.');
+    if (!activeTrip) {
+      Alert.alert('Error', 'No hay un viaje activo seleccionado para este horario y vehículo.');
+      return;
+    }
+
+    if (!selectedSeat || selectedSeat === 1) {
+      Alert.alert('Error', 'Por favor selecciona un asiento de pasajero válido.');
       return;
     }
 
@@ -159,17 +250,14 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     }
 
     if (tipoDoc !== 'RUC' && (!nroDoc || !nombres || !apellidos)) {
-      Alert.alert('Error', 'Ingresa el N° de documento, nombres y apellidos.');
+      Alert.alert('Error', 'Ingresa el N° de documento, nombres y apellidos del pasajero.');
       return;
     }
 
-    if (!telefono) {
-      Alert.alert('Error', 'Ingresa un número de celular de contacto.');
+    if (!telefono.trim()) {
+      Alert.alert('Error', 'Ingresa el número de celular del pasajero para enviar su boleto.');
       return;
     }
-
-    const selectedTrip = viajes.find((v) => v.id === selectedViajeId);
-    if (!selectedTrip) return;
 
     setLoading(true);
 
@@ -179,23 +267,23 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
           ? `YAPE-${codigoOpYape || Date.now()}`
           : `PRESENCIAL-${metodoPago}-${Date.now()}`;
 
-      // 1. Registrar venta en Supabase
+      // 1. Insertar Venta en Supabase
       const { data: ventaData, error: vErr } = await supabase
         .from('ventas')
         .insert({
-          viaje_id: selectedViajeId,
+          viaje_id: activeTrip.id,
           numero_asiento: selectedSeat,
           tipo_documento: tipoDoc,
           nro_documento: nroDoc.trim(),
-          nombres: tipoDoc === 'RUC' ? razonSocial : nombres.trim(),
+          nombres: tipoDoc === 'RUC' ? razonSocial.trim() : nombres.trim(),
           apellidos: tipoDoc === 'RUC' ? '' : apellidos.trim(),
           email: email.trim() || 'reservas@turismotunkychasky.com.pe',
           telefono: telefono.trim(),
-          monto_pagado: selectedTrip.precio_base,
+          monto_pagado: activeTrip.precio_base,
           culqi_charge_id: chargeId,
           metodo_pago: metodoPago,
-          razon_social: razonSocial,
-          direccion_fiscal: direccionFiscal,
+          razon_social: razonSocial.trim(),
+          direccion_fiscal: direccionFiscal.trim(),
           estado: 'CONFIRMADO',
           comprobante_emitido: true,
         })
@@ -204,15 +292,15 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 
       if (vErr) throw vErr;
 
-      // 2. Bloquear permanentemente el asiento
+      // 2. Bloquear permanentemente el asiento en asientos_bloqueos
       await supabase
         .from('asientos_bloqueos')
         .delete()
-        .eq('viaje_id', selectedViajeId)
+        .eq('viaje_id', activeTrip.id)
         .eq('numero_asiento', selectedSeat);
 
       await supabase.from('asientos_bloqueos').insert({
-        viaje_id: selectedViajeId,
+        viaje_id: activeTrip.id,
         numero_asiento: selectedSeat,
         estado: 'PAGADO',
         expira_at: '2099-12-31T23:59:59Z',
@@ -230,12 +318,12 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         email: email.trim(),
         razonSocial,
         direccionFiscal,
-        origen: selectedTrip.rutas?.origen || 'CUSCO',
-        destino: selectedTrip.rutas?.destino || 'QUILLABAMBA',
+        origen: activeTrip.rutas?.origen || 'CUSCO',
+        destino: activeTrip.rutas?.destino || 'QUILLABAMBA',
         asiento: selectedSeat,
-        monto: selectedTrip.precio_base,
-        fechaViaje: selectedTrip.fecha_viaje,
-        horaViaje: selectedTrip.hora_viaje,
+        monto: activeTrip.precio_base,
+        fechaViaje: activeTrip.fecha_viaje,
+        horaViaje: activeTrip.hora_viaje,
       });
 
       if (sunatRes.success && sunatRes.pdfUrl) {
@@ -260,12 +348,12 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         await sendConfirmationEmail(ventaData as any, sunatResultData);
       }
 
-      // 5. Ofrecer imprimir / compartir boleto de viaje
+      // 5. Ofrecer compartir o imprimir boleto
       Alert.alert(
         '✅ Venta Registrada con Éxito',
-        `Pasaje vendido para Asiento #${selectedSeat}.\nComprobante SUNAT: ${
+        `Pasaje vendido para Asiento #${selectedSeat} (${activeTrip.rutas?.origen} ➔ ${activeTrip.rutas?.destino}).\n\nComprobante SUNAT: ${
           sunatRes.serie ? `${sunatRes.serie}-${sunatRes.numero}` : 'Generado'
-        }\n\n¿Deseas imprimir o compartir el boleto por WhatsApp?`,
+        }\n\n¿Deseas enviar el boleto de viaje por WhatsApp al pasajero?`,
         [
           {
             text: 'Cerrar',
@@ -275,12 +363,12 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
             },
           },
           {
-            text: 'Compartir Boleto',
+            text: '📱 Enviar por WhatsApp',
             onPress: async () => {
               await generateAndShareTicket({
                 ...ventaData,
                 nro_comprobante: sunatRes.serie ? `${sunatRes.serie}-${sunatRes.numero}` : undefined,
-                viajes: selectedTrip,
+                viajes: activeTrip,
               } as any);
               onSaleComplete();
               onClose();
@@ -289,17 +377,32 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         ]
       );
     } catch (err: any) {
-      console.error('Error registrando venta presencial:', err);
+      console.error('Error procesando venta:', err);
       Alert.alert('Error', err.message || 'No se pudo completar la venta.');
     } finally {
       setLoading(false);
     }
   };
 
+  // Define seats configuration based on vehicle type
+  // Seat #1 is Conductor. 4P has seats 2, 3, 4, 5. 6P has seats 2, 3, 4, 5, 6, 7.
+  const passengerSeats = selectedVehicleType === '4P' ? [2, 3, 4, 5] : [2, 3, 4, 5, 6, 7];
+
+  const getSeatLabel = (n: number) => {
+    if (n === 2) return '#2 Copiloto';
+    if (n === 3) return '#3 Fila 2 Izq';
+    if (n === 4) return '#4 Fila 2 Cen';
+    if (n === 5) return '#5 Fila 2 Der';
+    if (n === 6) return '#6 Fila 3 Izq';
+    if (n === 7) return '#7 Fila 3 Der';
+    return `#${n}`;
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
         <View style={styles.modalContent}>
+          {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Venta Presencial en Agencia</Text>
@@ -310,56 +413,166 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
-            {/* 1. Seleccionar Viaje */}
-            <Text style={styles.sectionHeader}>1. Seleccionar Salida / Viaje</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tripScroll}>
-              {viajes.map((v) => (
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* 1. SELECCIONAR FECHA */}
+            <Text style={styles.stepTitle}>1. Seleccionar Fecha y Salida</Text>
+            <View style={styles.dateSelectorRow}>
+              <TouchableOpacity
+                style={[styles.dateChip, selectedDate === getPeruTodayString() && styles.chipActive]}
+                onPress={() => setSelectedDate(getPeruTodayString())}
+              >
+                <Calendar size={14} color={selectedDate === getPeruTodayString() ? '#FFF' : THEME.colors.textSecondary} />
+                <Text style={[styles.chipText, selectedDate === getPeruTodayString() && styles.textWhite]}>
+                  Hoy ({formatPeruDateDisplay(getPeruTodayString()).substring(0, 5)})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dateChip, selectedDate === getPeruTomorrowString() && styles.chipActive]}
+                onPress={() => setSelectedDate(getPeruTomorrowString())}
+              >
+                <Calendar size={14} color={selectedDate === getPeruTomorrowString() ? '#FFF' : THEME.colors.textSecondary} />
+                <Text style={[styles.chipText, selectedDate === getPeruTomorrowString() && styles.textWhite]}>
+                  Mañana ({formatPeruDateDisplay(getPeruTomorrowString()).substring(0, 5)})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Selector de Ruta */}
+            <Text style={styles.subLabel}>Ruta:</Text>
+            <View style={styles.wrapRow}>
+              {availableRoutes.map((rStr) => (
                 <TouchableOpacity
-                  key={v.id}
-                  style={[styles.tripCard, selectedViajeId === v.id && styles.tripCardActive]}
-                  onPress={() => setSelectedViajeId(v.id)}
+                  key={rStr}
+                  style={[styles.routeChip, selectedRouteKey === rStr && styles.chipActive]}
+                  onPress={() => setSelectedRouteKey(rStr)}
                 >
-                  <Text style={[styles.tripRoute, selectedViajeId === v.id && styles.textWhite]}>
-                    {v.rutas?.origen} ➔ {v.rutas?.destino}
-                  </Text>
-                  <Text style={[styles.tripMeta, selectedViajeId === v.id && styles.textWhiteSubtle]}>
-                    {v.fecha_viaje} • {v.hora_viaje}
-                  </Text>
-                  <Text style={[styles.tripPrice, selectedViajeId === v.id && styles.textWhite]}>
-                    S/ {Number(v.precio_base).toFixed(2)}
-                  </Text>
+                  <MapPin size={13} color={selectedRouteKey === rStr ? '#FFF' : THEME.colors.primary} />
+                  <Text style={[styles.chipText, selectedRouteKey === rStr && styles.textWhite]}>{rStr}</Text>
                 </TouchableOpacity>
               ))}
-            </ScrollView>
+            </View>
 
-            {/* 2. Seleccionar Asiento */}
-            <Text style={styles.sectionHeader}>2. Seleccionar Asiento Disponible</Text>
-            {availableSeats.length === 0 ? (
-              <Text style={styles.noSeatsText}>⚠️ No hay asientos disponibles en esta salida.</Text>
-            ) : (
-              <View style={styles.seatGrid}>
-                {availableSeats.map((seatNum) => (
+            {/* Selector de Horario */}
+            <Text style={styles.subLabel}>Hora de Salida:</Text>
+            <View style={styles.wrapRow}>
+              {availableHours.length === 0 ? (
+                <Text style={styles.emptyNotice}>⚠️ No hay salidas programadas para esta fecha y ruta.</Text>
+              ) : (
+                availableHours.map((h) => (
+                  <TouchableOpacity
+                    key={h}
+                    style={[styles.timeChip, selectedTime === h && styles.chipActive]}
+                    onPress={() => setSelectedTime(h)}
+                  >
+                    <Clock size={13} color={selectedTime === h ? '#FFF' : THEME.colors.textPrimary} />
+                    <Text style={[styles.chipText, selectedTime === h && styles.textWhite]}>{h}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+
+            {/* 2. SELECCIONAR TIPO DE VEHÍCULO */}
+            <Text style={styles.stepTitle}>2. Seleccionar Tipo de Vehículo</Text>
+            <View style={styles.vehicleRow}>
+              <TouchableOpacity
+                style={[styles.vehicleBtn, selectedVehicleType === '4P' && styles.vehicleBtnActive]}
+                onPress={() => setSelectedVehicleType('4P')}
+              >
+                <Car size={20} color={selectedVehicleType === '4P' ? '#FFF' : THEME.colors.primary} />
+                <View>
+                  <Text style={[styles.vehicleTitle, selectedVehicleType === '4P' && styles.textWhite]}>
+                    Camioneta 4 Pasajeros
+                  </Text>
+                  <Text style={[styles.vehicleSub, selectedVehicleType === '4P' && styles.textWhiteSubtle]}>
+                    4 Asientos disponibles
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.vehicleBtn, selectedVehicleType === '6P' && styles.vehicleBtnActive]}
+                onPress={() => setSelectedVehicleType('6P')}
+              >
+                <Car size={20} color={selectedVehicleType === '6P' ? '#FFF' : THEME.colors.primary} />
+                <View>
+                  <Text style={[styles.vehicleTitle, selectedVehicleType === '6P' && styles.textWhite]}>
+                    Camioneta 6 Pasajeros
+                  </Text>
+                  <Text style={[styles.vehicleSub, selectedVehicleType === '6P' && styles.textWhiteSubtle]}>
+                    6 Asientos disponibles
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* 3. SELECCIONAR ASIENTO */}
+            <Text style={styles.stepTitle}>3. Seleccionar Asiento</Text>
+            <View style={styles.seatLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: THEME.colors.seatAvailable }]} />
+                <Text style={styles.legendText}>Disponible</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: THEME.colors.seatSold }]} />
+                <Text style={styles.legendText}>Ocupado</Text>
+              </View>
+            </View>
+
+            <View style={styles.seatsGrid}>
+              {/* Asiento 1 - Conductor (No seleccionable) */}
+              <View style={[styles.seatCard, styles.seatDriver]}>
+                <Armchair size={16} color="#94A3B8" />
+                <Text style={styles.seatDriverText}>🪑 Conductor (Chofer)</Text>
+              </View>
+
+              {/* Passenger Seats */}
+              {passengerSeats.map((seatNum) => {
+                const isOccupied = occupiedSeats.has(seatNum);
+                const isSelected = selectedSeat === seatNum;
+
+                return (
                   <TouchableOpacity
                     key={seatNum}
-                    style={[styles.seatBtn, selectedSeat === seatNum && styles.seatBtnActive]}
+                    style={[
+                      styles.seatCard,
+                      isOccupied && styles.seatOccupied,
+                      !isOccupied && styles.seatAvailable,
+                      isSelected && styles.seatSelected,
+                    ]}
+                    disabled={isOccupied}
                     onPress={() => setSelectedSeat(seatNum)}
                   >
-                    <Text style={[styles.seatBtnText, selectedSeat === seatNum && styles.textWhite]}>
-                      #{seatNum}
+                    <Armchair size={16} color={isSelected ? '#FFF' : isOccupied ? '#FFF' : THEME.colors.primary} />
+                    <Text
+                      style={[
+                        styles.seatText,
+                        isSelected && styles.textWhite,
+                        isOccupied && styles.textWhite,
+                      ]}
+                    >
+                      {getSeatLabel(seatNum)} {isOccupied ? '(Ocupado)' : ''}
                     </Text>
                   </TouchableOpacity>
-                ))}
+                );
+              })}
+            </View>
+
+            {/* Price Badge */}
+            {activeTrip && (
+              <View style={styles.priceSummaryBox}>
+                <Text style={styles.priceSummaryLabel}>Precio del Pasaje:</Text>
+                <Text style={styles.priceSummaryValue}>S/ {Number(activeTrip.precio_base).toFixed(2)}</Text>
               </View>
             )}
 
-            {/* 3. Datos del Pasajero */}
-            <Text style={styles.sectionHeader}>3. Datos del Pasajero y Comprobante</Text>
+            {/* 4. DATOS DEL PASAJERO */}
+            <Text style={styles.stepTitle}>4. Datos del Pasajero y Comprobante</Text>
             <View style={styles.docTypeRow}>
               {(['DNI', 'RUC', 'CE', 'PASAPORTE'] as TipoDocumento[]).map((t) => (
                 <TouchableOpacity
                   key={t}
-                  style={[styles.docTypeChip, tipoDoc === t && styles.docTypeChipActive]}
+                  style={[styles.docTypeChip, tipoDoc === t && styles.chipActive]}
                   onPress={() => setTipoDoc(t)}
                 >
                   <Text style={[styles.docTypeText, tipoDoc === t && styles.textWhite]}>{t}</Text>
@@ -367,12 +580,15 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               ))}
             </View>
 
+            {/* N° Documento + Botón Consultar */}
+            <Text style={styles.fieldLabel}>Número de Documento ({tipoDoc}):</Text>
             <View style={styles.lookupRow}>
               <TextInput
                 style={styles.inputFlex}
                 value={nroDoc}
                 onChangeText={setNroDoc}
-                placeholder={`N° ${tipoDoc}`}
+                placeholder={`Ej: ${tipoDoc === 'DNI' ? '45892147' : '20613271701'}`}
+                placeholderTextColor="#94A3B8"
                 keyboardType="numeric"
               />
               {(tipoDoc === 'DNI' || tipoDoc === 'RUC') && (
@@ -386,65 +602,93 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                   ) : (
                     <>
                       <Search size={14} color="#FFF" />
-                      <Text style={styles.lookupBtnText}>Consultar</Text>
+                      <Text style={styles.lookupBtnText}>Consultar {tipoDoc}</Text>
                     </>
                   )}
                 </TouchableOpacity>
               )}
             </View>
 
+            {/* Nombres / Razón Social */}
             {tipoDoc === 'RUC' ? (
               <>
+                <Text style={styles.fieldLabel}>Razón Social de la Empresa:</Text>
                 <TextInput
                   style={styles.input}
                   value={razonSocial}
                   onChangeText={setRazonSocial}
-                  placeholder="Razón Social de la Empresa"
+                  placeholder="Nombre de la Empresa"
+                  placeholderTextColor="#94A3B8"
                 />
+
+                <Text style={styles.fieldLabel}>Dirección Fiscal:</Text>
                 <TextInput
                   style={styles.input}
                   value={direccionFiscal}
                   onChangeText={setDireccionFiscal}
-                  placeholder="Dirección Fiscal"
+                  placeholder="Dirección Fiscal para Factura"
+                  placeholderTextColor="#94A3B8"
                 />
               </>
             ) : (
               <View style={styles.nameRow}>
-                <TextInput
-                  style={styles.inputHalf}
-                  value={nombres}
-                  onChangeText={setNombres}
-                  placeholder="Nombres"
-                />
-                <TextInput
-                  style={styles.inputHalf}
-                  value={apellidos}
-                  onChangeText={setApellidos}
-                  placeholder="Apellidos"
-                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Nombres:</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={nombres}
+                    onChangeText={setNombres}
+                    placeholder="Nombres"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>Apellidos:</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={apellidos}
+                    onChangeText={setApellidos}
+                    placeholder="Apellidos"
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
               </View>
             )}
 
-            <TextInput
-              style={styles.input}
-              value={telefono}
-              onChangeText={setTelefono}
-              placeholder="Celular / WhatsApp (Obligatorio)"
-              keyboardType="phone-pad"
-            />
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Correo electrónico (Opcional)"
-              keyboardType="email-address"
-            />
+            {/* Celular / WhatsApp */}
+            <Text style={styles.fieldLabel}>Número de Celular / WhatsApp (Obligatorio):</Text>
+            <View style={styles.inputWithIcon}>
+              <Phone size={16} color={THEME.colors.primary} />
+              <TextInput
+                style={styles.inputInner}
+                value={telefono}
+                onChangeText={setTelefono}
+                placeholder="Ej: 984123456"
+                placeholderTextColor="#94A3B8"
+                keyboardType="phone-pad"
+              />
+            </View>
 
-            {/* 4. Método de Pago */}
-            <Text style={styles.sectionHeader}>4. Método de Pago</Text>
+            {/* Correo Electrónico */}
+            <Text style={styles.fieldLabel}>Correo Electrónico (Opcional):</Text>
+            <View style={styles.inputWithIcon}>
+              <Mail size={16} color={THEME.colors.primary} />
+              <TextInput
+                style={styles.inputInner}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="cliente@gmail.com"
+                placeholderTextColor="#94A3B8"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            {/* 5. MÉTODO DE PAGO */}
+            <Text style={styles.stepTitle}>5. Método de Pago</Text>
             <View style={styles.paymentMethodsRow}>
               <TouchableOpacity
-                style={[styles.payMethodBtn, metodoPago === 'EFECTIVO' && styles.payMethodActive]}
+                style={[styles.payMethodBtn, metodoPago === 'EFECTIVO' && styles.chipActive]}
                 onPress={() => setMetodoPago('EFECTIVO')}
               >
                 <Banknote size={16} color={metodoPago === 'EFECTIVO' ? '#FFF' : THEME.colors.primary} />
@@ -454,7 +698,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.payMethodBtn, metodoPago === 'YAPE' && styles.payMethodActive]}
+                style={[styles.payMethodBtn, metodoPago === 'YAPE' && styles.chipActive]}
                 onPress={() => setMetodoPago('YAPE')}
               >
                 <QrCode size={16} color={metodoPago === 'YAPE' ? '#FFF' : THEME.colors.primary} />
@@ -464,27 +708,31 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.payMethodBtn, metodoPago === 'TARJETA' && styles.payMethodActive]}
+                style={[styles.payMethodBtn, metodoPago === 'TARJETA' && styles.chipActive]}
                 onPress={() => setMetodoPago('TARJETA')}
               >
                 <CreditCard size={16} color={metodoPago === 'TARJETA' ? '#FFF' : THEME.colors.primary} />
                 <Text style={[styles.payMethodText, metodoPago === 'TARJETA' && styles.textWhite]}>
-                  POS / Tarjeta
+                  Tarjeta POS
                 </Text>
               </TouchableOpacity>
             </View>
 
             {metodoPago === 'YAPE' && (
-              <TextInput
-                style={styles.input}
-                value={codigoOpYape}
-                onChangeText={setCodigoOpYape}
-                placeholder="Código de Operación Yape (6 dígitos)"
-                keyboardType="numeric"
-              />
+              <View style={{ marginTop: 8 }}>
+                <Text style={styles.fieldLabel}>Código de Operación Yape (6 dígitos):</Text>
+                <TextInput
+                  style={styles.input}
+                  value={codigoOpYape}
+                  onChangeText={setCodigoOpYape}
+                  placeholder="Ej: 123456"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                />
+              </View>
             )}
 
-            {/* Submit Button */}
+            {/* BOTÓN FINAL DE EMISIÓN */}
             <TouchableOpacity
               style={styles.submitBtn}
               onPress={handleProcessSale}
@@ -495,7 +743,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               ) : (
                 <>
                   <CheckCircle size={18} color="#FFF" />
-                  <Text style={styles.submitBtnText}>Confirmar y Emitir Boleto</Text>
+                  <Text style={styles.submitBtnText}>Confirmar y Emitir Boleto SUNAT</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -509,7 +757,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -517,17 +765,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '92%',
+    maxHeight: '94%',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   title: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     color: THEME.colors.textPrimary,
   },
   subtitle: {
@@ -537,45 +785,78 @@ const styles = StyleSheet.create({
   closeBtn: {
     padding: 6,
   },
-  sectionHeader: {
-    fontSize: 13,
+  stepTitle: {
+    fontSize: 14,
     fontWeight: '800',
     color: THEME.colors.primary,
     marginTop: 14,
     marginBottom: 8,
   },
-  tripScroll: {
-    flexDirection: 'row',
+  subLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
     marginBottom: 4,
+    marginTop: 6,
   },
-  tripCard: {
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  dateSelectorRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dateChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: THEME.colors.surfaceSubtle,
-    borderRadius: 10,
-    padding: 10,
-    marginRight: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-    minWidth: 140,
   },
-  tripCardActive: {
+  wrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  routeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  timeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  chipActive: {
     backgroundColor: THEME.colors.primary,
     borderColor: THEME.colors.primary,
   },
-  tripRoute: {
+  chipText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     color: THEME.colors.textPrimary,
-  },
-  tripMeta: {
-    fontSize: 10,
-    color: THEME.colors.textSecondary,
-    marginTop: 2,
-  },
-  tripPrice: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: THEME.colors.primary,
-    marginTop: 4,
   },
   textWhite: {
     color: '#FFF',
@@ -583,32 +864,122 @@ const styles = StyleSheet.create({
   textWhiteSubtle: {
     color: 'rgba(255, 255, 255, 0.8)',
   },
-  noSeatsText: {
+  emptyNotice: {
     color: THEME.colors.danger,
     fontSize: 12,
     fontStyle: 'italic',
+    paddingVertical: 4,
   },
-  seatGrid: {
+  vehicleRow: {
     flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
+    gap: 10,
   },
-  seatBtn: {
+  vehicleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: THEME.colors.surfaceSubtle,
+    padding: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
   },
-  seatBtnActive: {
+  vehicleBtnActive: {
     backgroundColor: THEME.colors.primary,
     borderColor: THEME.colors.primary,
   },
-  seatBtnText: {
-    fontSize: 13,
+  vehicleTitle: {
+    fontSize: 12,
     fontWeight: '800',
     color: THEME.colors.textPrimary,
+  },
+  vehicleSub: {
+    fontSize: 10,
+    color: THEME.colors.textSecondary,
+  },
+  seatLegend: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: 11,
+    color: THEME.colors.textSecondary,
+    fontWeight: '600',
+  },
+  seatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  seatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+    minWidth: '47%',
+  },
+  seatDriver: {
+    backgroundColor: '#E2E8F0',
+    borderColor: '#CBD5E1',
+    opacity: 0.8,
+  },
+  seatDriverText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b',
+  },
+  seatAvailable: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  seatOccupied: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    opacity: 0.6,
+  },
+  seatSelected: {
+    backgroundColor: THEME.colors.primary,
+    borderColor: THEME.colors.primary,
+  },
+  seatText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+  },
+  priceSummaryBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.primarySoft,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  priceSummaryLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.colors.primary,
+  },
+  priceSummaryValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: THEME.colors.primary,
   },
   docTypeRow: {
     flexDirection: 'row',
@@ -617,16 +988,12 @@ const styles = StyleSheet.create({
   },
   docTypeChip: {
     flex: 1,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 6,
     alignItems: 'center',
     backgroundColor: THEME.colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-  },
-  docTypeChipActive: {
-    backgroundColor: THEME.colors.primary,
-    borderColor: THEME.colors.primary,
   },
   docTypeText: {
     fontSize: 11,
@@ -636,80 +1003,80 @@ const styles = StyleSheet.create({
   lookupRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
   },
   inputFlex: {
     flex: 1,
-    backgroundColor: THEME.colors.surfaceSubtle,
+    backgroundColor: THEME.colors.surface,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-    fontSize: 13,
+    fontSize: 14,
+    color: '#0F172A',
   },
   lookupBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     backgroundColor: THEME.colors.accentDark,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     borderRadius: 8,
     justifyContent: 'center',
   },
   lookupBtnText: {
     color: '#FFF',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   input: {
-    backgroundColor: THEME.colors.surfaceSubtle,
+    backgroundColor: THEME.colors.surface,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-    fontSize: 13,
-    marginBottom: 8,
+    fontSize: 14,
+    color: '#0F172A',
   },
   nameRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
   },
-  inputHalf: {
-    flex: 1,
-    backgroundColor: THEME.colors.surfaceSubtle,
+  inputWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: THEME.colors.surface,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-    fontSize: 13,
+  },
+  inputInner: {
+    flex: 1,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#0F172A',
   },
   paymentMethodsRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 8,
   },
   payMethodBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
     backgroundColor: THEME.colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: THEME.colors.border,
-    paddingVertical: 9,
+    paddingVertical: 10,
     borderRadius: 8,
   },
-  payMethodActive: {
-    backgroundColor: THEME.colors.primary,
-    borderColor: THEME.colors.primary,
-  },
   payMethodText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: THEME.colors.textPrimary,
   },
@@ -721,8 +1088,8 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
-    marginTop: 16,
-    marginBottom: 10,
+    marginTop: 18,
+    marginBottom: 20,
     ...THEME.shadows.md,
   },
   submitBtnText: {

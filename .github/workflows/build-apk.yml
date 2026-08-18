@@ -59,17 +59,24 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.2
-          name: Tunky Chasky Admin v1.0.2 (Modo Inmersivo / Ocultar Botones Android)
+          tag_name: v1.0.3
+          name: Tunky Chasky Admin v1.0.3 (Venta Presencial, Horarios y Asientos 4P/6P)
           body: |
-            ## 📱 Tunky Chasky Admin v1.0.2 (Modo Inmersivo)
+            ## 📱 Tunky Chasky Admin v1.0.3
             
             ### 📥 Descarga Directa:
             Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### ✨ Novedades v1.0.2:
-            - **Modo Inmersivo Total**: Los 3 botones inferiores de Android (Atrás, Inicio, Tareas) se ocultan automáticamente al entrar a la app para aprovechar toda la pantalla.
-            - Barra de navegación inferior con espacio optimizado para tocar cómodamente los apartados.
+            ### ✨ Correcciones y Mejoras v1.0.3:
+            - **Zona Horaria Perú (UTC-5)**: Fechas sincronizadas correctamente (Hoy 17 de Agosto / Mañana 18 de Agosto).
+            - **Venta Presencial Renovada**:
+              - Paso a paso claro: Fecha/Hora ➔ Tipo de Vehículo (4P ó 6P) ➔ Asiento.
+              - Asiento #1 (Conductor) bloqueado y no seleccionable.
+              - Camioneta 4P muestra exactamente 4 asientos de pasajero (#2 a #5).
+              - Camioneta 6P muestra exactamente 6 asientos de pasajero (#2 a #7).
+              - Campos de Celular/WhatsApp y Correo con etiquetas claras y placeholders legibles.
+            - **Modo Inmersivo Permanente**: Los 3 botones de Android se mantienen ocultos incluso al salir y volver a la app.
+            - **Aislamiento Total de Flota (4P y 6P)**: Cada vehículo opera de forma independiente sin cruce de asientos.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,7 +17,8 @@ import { CreateTripModal } from '../components/CreateTripModal';
 import { supabase } from '../lib/supabase';
 import { Viaje } from '../types/database';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Calendar, Clock } from 'lucide-react-native';
+import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay } from '../utils/dateHelper';
+import { Plus, Calendar, Filter } from 'lucide-react-native';
 
 export const TripsScreen: React.FC = () => {
   const { isAdmin } = useAuth();
@@ -25,6 +26,7 @@ export const TripsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filterDate, setFilterDate] = useState<'ALL' | 'TODAY' | 'TOMORROW'>('ALL');
+  const [selectedRouteFilter, setSelectedRouteFilter] = useState<string>('ALL');
 
   // Modals
   const [selectedSeatViaje, setSelectedSeatViaje] = useState<Viaje | null>(null);
@@ -33,7 +35,7 @@ export const TripsScreen: React.FC = () => {
 
   const loadTrips = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getPeruTodayString();
       const { data, error } = await supabase
         .from('viajes')
         .select(`
@@ -46,7 +48,7 @@ export const TripsScreen: React.FC = () => {
           estado,
           created_at,
           rutas (origen, destino),
-          vehiculos (nombre_display, total_asientos_pasajero)
+          vehiculos (nombre_display, total_asientos_pasajero, tipo)
         `)
         .gte('fecha_viaje', today)
         .order('fecha_viaje', { ascending: true })
@@ -97,7 +99,7 @@ export const TripsScreen: React.FC = () => {
               if (error) {
                 // Si tiene ventas registradas, cambiar estado a CANCELADO
                 await supabase.from('viajes').update({ estado: 'CANCELADO' }).eq('id', viaje.id);
-                Alert.alert('Aviso', 'El viaje tenía reservas asociadas y fue marcado como CANCELADO.');
+                Alert.alert('Aviso', 'El viaje tenía reservas y fue marcado como CANCELADO.');
               } else {
                 Alert.alert('Éxito', 'Salida eliminada con éxito.');
               }
@@ -112,14 +114,22 @@ export const TripsScreen: React.FC = () => {
     );
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const todayStr = getPeruTodayString();
+  const tomorrowStr = getPeruTomorrowString();
+
+  const uniqueRoutes = Array.from(
+    new Set(viajes.map((v) => `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`))
+  );
 
   const filteredTrips = viajes.filter((v) => {
-    if (filterDate === 'TODAY') return v.fecha_viaje === todayStr;
-    if (filterDate === 'TOMORROW') return v.fecha_viaje === tomorrowStr;
+    if (filterDate === 'TODAY' && v.fecha_viaje !== todayStr) return false;
+    if (filterDate === 'TOMORROW' && v.fecha_viaje !== tomorrowStr) return false;
+
+    if (selectedRouteFilter !== 'ALL') {
+      const rStr = `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`;
+      if (rStr !== selectedRouteFilter) return false;
+    }
+
     return true;
   });
 
@@ -149,7 +159,7 @@ export const TripsScreen: React.FC = () => {
             onPress={() => setFilterDate('TODAY')}
           >
             <Text style={[styles.filterChipText, filterDate === 'TODAY' && styles.textWhite]}>
-              Hoy
+              Hoy ({formatPeruDateDisplay(todayStr).substring(0, 5)})
             </Text>
           </TouchableOpacity>
 
@@ -158,7 +168,7 @@ export const TripsScreen: React.FC = () => {
             onPress={() => setFilterDate('TOMORROW')}
           >
             <Text style={[styles.filterChipText, filterDate === 'TOMORROW' && styles.textWhite]}>
-              Mañana
+              Mañana ({formatPeruDateDisplay(tomorrowStr).substring(0, 5)})
             </Text>
           </TouchableOpacity>
         </View>
@@ -173,6 +183,32 @@ export const TripsScreen: React.FC = () => {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Routes Horizontal Filter */}
+      {uniqueRoutes.length > 1 && (
+        <View style={styles.routesRow}>
+          <TouchableOpacity
+            style={[styles.routePill, selectedRouteFilter === 'ALL' && styles.routePillActive]}
+            onPress={() => setSelectedRouteFilter('ALL')}
+          >
+            <Text style={[styles.routePillText, selectedRouteFilter === 'ALL' && styles.textWhite]}>
+              Todas las rutas
+            </Text>
+          </TouchableOpacity>
+
+          {uniqueRoutes.map((r) => (
+            <TouchableOpacity
+              key={r}
+              style={[styles.routePill, selectedRouteFilter === r && styles.routePillActive]}
+              onPress={() => setSelectedRouteFilter(r)}
+            >
+              <Text style={[styles.routePillText, selectedRouteFilter === r && styles.textWhite]}>
+                {r}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Trips List */}
       {loading ? (
@@ -196,7 +232,7 @@ export const TripsScreen: React.FC = () => {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No hay salidas programadas para esta fecha.</Text>
+              <Text style={styles.emptyText}>No hay salidas programadas para esta fecha o filtro.</Text>
             </View>
           }
         />
@@ -231,7 +267,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   filterChipsRow: {
     flexDirection: 'row',
@@ -239,7 +275,7 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     backgroundColor: THEME.colors.surface,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
@@ -250,8 +286,32 @@ const styles = StyleSheet.create({
     borderColor: THEME.colors.primary,
   },
   filterChipText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
+    color: THEME.colors.textSecondary,
+  },
+  routesRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  routePill: {
+    backgroundColor: THEME.colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  routePillActive: {
+    backgroundColor: THEME.colors.accentDark,
+    borderColor: THEME.colors.accentDark,
+  },
+  routePillText: {
+    fontSize: 11,
+    fontWeight: '600',
     color: THEME.colors.textSecondary,
   },
   textWhite: {

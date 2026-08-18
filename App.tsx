@@ -8,6 +8,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Platform,
+  AppState,
 } from 'react-native';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { THEME } from './src/constants/theme';
@@ -41,12 +42,26 @@ const MainNavigator: React.FC = () => {
 
   // Auto-hide Android bottom navigation bar (3 buttons) in immersive mode
   useEffect(() => {
-    if (Platform.OS === 'android') {
-      try {
-        NavigationBar.setVisibilityAsync('hidden');
-        NavigationBar.setBehaviorAsync('overlay-swipe');
-      } catch (_e) {}
-    }
+    const hideNavBar = () => {
+      if (Platform.OS === 'android') {
+        try {
+          NavigationBar.setVisibilityAsync('hidden');
+          NavigationBar.setBehaviorAsync('overlay-swipe');
+        } catch (_e) {}
+      }
+    };
+
+    hideNavBar();
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        hideNavBar();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, [currentTab, user]);
 
   // Supabase Realtime Listener for new incoming sales from Web

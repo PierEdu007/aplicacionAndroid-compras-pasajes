@@ -12,6 +12,7 @@ import { THEME } from '../constants/theme';
 import { Header } from '../components/Header';
 import { supabase } from '../lib/supabase';
 import { Venta } from '../types/database';
+import { getPeruTodayString } from '../utils/dateHelper';
 import {
   TrendingUp,
   Clock,
@@ -48,7 +49,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   const loadDashboardData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getPeruTodayString();
 
       // 1. Fetch Ventas
       const { data: salesData } = await supabase
