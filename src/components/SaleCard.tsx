@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Venta } from '../types/database';
-import { CheckCircle2, XCircle, FileText, Share2, Phone, MessageCircle, Mail } from 'lucide-react-native';
+import { CheckCircle2, XCircle, FileText, Share2, Phone, MessageCircle, Mail, Clock } from 'lucide-react-native';
 import { generateAndShareTicket } from '../services/ticketPdfService';
 
 interface SaleCardProps {
@@ -95,12 +95,30 @@ export const SaleCard: React.FC<SaleCardProps> = ({
 
         <View style={styles.metaRow}>
           <Text style={styles.metaText}>
-            📅 {venta.viajes?.fecha_viaje || ''} {venta.viajes?.hora_viaje || ''}
+            📅 Viaje: {venta.viajes?.fecha_viaje || ''} {venta.viajes?.hora_viaje ? venta.viajes.hora_viaje.substring(0, 5) : ''}
           </Text>
           <Text style={styles.metaText}>
             💳 {venta.metodo_pago || 'YAPE'} {venta.culqi_charge_id?.includes('YAPE') ? `(${venta.culqi_charge_id.replace('YAPE-', '')})` : ''}
           </Text>
         </View>
+
+        {venta.created_at ? (
+          <View style={styles.purchaseTimeBox}>
+            <Clock size={12} color="#742284" />
+            <Text style={styles.purchaseTimeText}>
+              Comprado el:{' '}
+              {new Date(venta.created_at).toLocaleString('es-PE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+              })}
+            </Text>
+          </View>
+        ) : null}
 
         {venta.nro_comprobante && (
           <View style={styles.invoiceBadge}>
@@ -294,6 +312,22 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: 11,
     color: THEME.colors.textMuted,
+  },
+  purchaseTimeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  purchaseTimeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#742284',
   },
   invoiceBadge: {
     backgroundColor: '#EFF6FF',

@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Viaje, TipoDocumento } from '../types/database';
@@ -18,6 +20,7 @@ import { emitirComprobanteSunat } from '../services/sunatService';
 import { sendConfirmationEmail } from '../services/emailService';
 import { generateAndShareTicket } from '../services/ticketPdfService';
 import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay, getPeruDate } from '../utils/dateHelper';
+import { CalendarModal } from './CalendarModal';
 import {
   X,
   Search,
@@ -78,6 +81,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
   const [metodoPago, setMetodoPago] = useState<'EFECTIVO' | 'YAPE' | 'TARJETA'>('EFECTIVO');
   const [codigoOpYape, setCodigoOpYape] = useState('');
   const [lookingUpDoc, setLookingUpDoc] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -408,7 +412,10 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.overlay}
+      >
         <View style={styles.modalContent}>
           {/* Header */}
           <View style={styles.header}>
@@ -421,7 +428,11 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView 
+            showsVerticalScrollIndicator={false} 
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 220 }}
+          >
             {/* 1. SELECCIONAR FECHA */}
             <Text style={styles.stepTitle}>1. Seleccionar Fecha y Salida</Text>
             <View style={styles.dateSelectorRow}>
@@ -442,6 +453,24 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                 <Calendar size={14} color={selectedDate === getPeruTomorrowString() ? '#FFF' : THEME.colors.textSecondary} />
                 <Text style={[styles.chipText, selectedDate === getPeruTomorrowString() && styles.textWhite]}>
                   Mañana ({formatPeruDateDisplay(getPeruTomorrowString()).substring(0, 5)})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.dateChip, 
+                  selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() && styles.chipActive
+                ]}
+                onPress={() => setShowCalendar(true)}
+              >
+                <Calendar size={14} color={selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() ? '#FFF' : THEME.colors.primary} />
+                <Text style={[
+                  styles.chipText, 
+                  selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() && styles.textWhite
+                ]}>
+                  {selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() 
+                    ? formatPeruDateDisplay(selectedDate).substring(0, 5) 
+                    : '📅 Calendario'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -756,8 +785,16 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               )}
             </TouchableOpacity>
           </ScrollView>
+
+          {/* Calendar Picker Modal */}
+          <CalendarModal
+            visible={showCalendar}
+            selectedDate={selectedDate}
+            onSelectDate={(newDate) => setSelectedDate(newDate)}
+            onClose={() => setShowCalendar(false)}
+          />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

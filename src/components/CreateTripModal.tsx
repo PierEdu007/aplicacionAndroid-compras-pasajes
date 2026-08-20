@@ -1,9 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Modal, 
+  TouchableOpacity, 
+  TextInput, 
+  ActivityIndicator, 
+  Alert, 
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
 import { THEME } from '../constants/theme';
 import { Ruta, Vehiculo } from '../types/database';
 import { supabase } from '../lib/supabase';
-import { X, Plus, Calendar, Clock, DollarSign } from 'lucide-react-native';
+import { X, Plus, Calendar, Clock, DollarSign, ChevronRight } from 'lucide-react-native';
+import { CalendarModal } from './CalendarModal';
+import { TimePickerModal } from './TimePickerModal';
+import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay } from '../utils/dateHelper';
 
 interface CreateTripModalProps {
   visible: boolean;
@@ -22,9 +37,13 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
 
   const [selectedRutaId, setSelectedRutaId] = useState('');
   const [selectedVehiculoId, setSelectedVehiculoId] = useState('');
-  const [fechaViaje, setFechaViaje] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaViaje, setFechaViaje] = useState(getPeruTodayString());
   const [horaViaje, setHoraViaje] = useState('07:00');
   const [precioBase, setPrecioBase] = useState('50.00');
+
+  // Modales de Selección Visual
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -99,9 +118,15 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
     }
   };
 
+  const todayStr = getPeruTodayString();
+  const tomorrowStr = getPeruTomorrowString();
+
   return (
     <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.overlay}
+      >
         <View style={styles.modalContent}>
           <View style={styles.header}>
             <View>
@@ -113,7 +138,11 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 60 }}
+          >
             {/* Ruta Selector */}
             <Text style={styles.label}>Ruta de Viaje:</Text>
             <View style={styles.chipRow}>
@@ -154,32 +183,92 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Fecha */}
-            <Text style={styles.label}>Fecha (YYYY-MM-DD):</Text>
-            <View style={styles.inputBox}>
-              <Calendar size={18} color={THEME.colors.primary} />
-              <TextInput
-                style={styles.input}
-                value={fechaViaje}
-                onChangeText={setFechaViaje}
-                placeholder="2026-08-18"
-              />
+            {/* Fecha con Calendario */}
+            <Text style={styles.label}>Fecha del Viaje:</Text>
+            <View style={styles.quickDateRow}>
+              <TouchableOpacity
+                style={[styles.quickDateBtn, fechaViaje === todayStr && styles.quickDateBtnActive]}
+                onPress={() => setFechaViaje(todayStr)}
+              >
+                <Text style={[styles.quickDateText, fechaViaje === todayStr && styles.quickDateTextActive]}>
+                  Hoy ({formatPeruDateDisplay(todayStr).substring(0, 5)})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickDateBtn, fechaViaje === tomorrowStr && styles.quickDateBtnActive]}
+                onPress={() => setFechaViaje(tomorrowStr)}
+              >
+                <Text style={[styles.quickDateText, fechaViaje === tomorrowStr && styles.quickDateTextActive]}>
+                  Mañana ({formatPeruDateDisplay(tomorrowStr).substring(0, 5)})
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Hora */}
-            <Text style={styles.label}>Hora de Salida (HH:MM):</Text>
-            <View style={styles.inputBox}>
-              <Clock size={18} color={THEME.colors.primary} />
-              <TextInput
-                style={styles.input}
-                value={horaViaje}
-                onChangeText={setHoraViaje}
-                placeholder="07:00"
-              />
+            <TouchableOpacity 
+              style={styles.pickerTriggerBox}
+              onPress={() => setShowCalendar(true)}
+            >
+              <View style={styles.pickerTriggerLeft}>
+                <Calendar size={18} color={THEME.colors.primary} />
+                <Text style={styles.pickerTriggerValue}>
+                  {formatPeruDateDisplay(fechaViaje)} ({fechaViaje})
+                </Text>
+              </View>
+              <View style={styles.pickerTriggerRight}>
+                <Text style={styles.pickerTriggerAction}>Abrir Calendario</Text>
+                <ChevronRight size={16} color={THEME.colors.primary} />
+              </View>
+            </TouchableOpacity>
+
+            {/* Hora de Salida */}
+            <Text style={styles.label}>Hora de Salida:</Text>
+            <View style={styles.quickHoursRow}>
+              {['05:00', '06:00', '07:00', '08:00', '13:00', '15:00', '18:00'].map((h) => (
+                <TouchableOpacity
+                  key={h}
+                  style={[styles.quickHourChip, horaViaje.substring(0, 5) === h && styles.quickHourChipActive]}
+                  onPress={() => setHoraViaje(h)}
+                >
+                  <Text style={[styles.quickHourText, horaViaje.substring(0, 5) === h && styles.quickHourTextActive]}>
+                    {h}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
+
+            <TouchableOpacity 
+              style={styles.pickerTriggerBox}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <View style={styles.pickerTriggerLeft}>
+                <Clock size={18} color={THEME.colors.primary} />
+                <Text style={styles.pickerTriggerValue}>
+                  {horaViaje.substring(0, 5)} {parseInt(horaViaje.split(':')[0], 10) >= 12 ? 'PM' : 'AM'}
+                </Text>
+              </View>
+              <View style={styles.pickerTriggerRight}>
+                <Text style={styles.pickerTriggerAction}>Cambiar Hora</Text>
+                <ChevronRight size={16} color={THEME.colors.primary} />
+              </View>
+            </TouchableOpacity>
 
             {/* Precio Base */}
             <Text style={styles.label}>Precio por Pasajero (S/):</Text>
+            <View style={styles.quickPriceRow}>
+              {['40.00', '50.00', '60.00', '70.00'].map((p) => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.quickPriceChip, precioBase === p && styles.quickPriceChipActive]}
+                  onPress={() => setPrecioBase(p)}
+                >
+                  <Text style={[styles.quickPriceText, precioBase === p && styles.quickPriceTextActive]}>
+                    S/ {p}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={styles.inputBox}>
               <DollarSign size={18} color={THEME.colors.primary} />
               <TextInput
@@ -207,8 +296,24 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
               )}
             </TouchableOpacity>
           </ScrollView>
+
+          {/* Calendar Picker Modal */}
+          <CalendarModal
+            visible={showCalendar}
+            selectedDate={fechaViaje}
+            onSelectDate={(newDate) => setFechaViaje(newDate)}
+            onClose={() => setShowCalendar(false)}
+          />
+
+          {/* Time Picker Modal */}
+          <TimePickerModal
+            visible={showTimePicker}
+            selectedTime={horaViaje}
+            onSelectTime={(newTime) => setHoraViaje(newTime)}
+            onClose={() => setShowTimePicker(false)}
+          />
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };
@@ -224,7 +329,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   header: {
     flexDirection: 'row',
@@ -248,7 +353,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: THEME.colors.textPrimary,
-    marginTop: 12,
+    marginTop: 14,
     marginBottom: 6,
   },
   chipRow: {
@@ -277,6 +382,119 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontWeight: '800',
   },
+  quickDateRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  quickDateBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  quickDateBtnActive: {
+    backgroundColor: THEME.colors.primary,
+    borderColor: THEME.colors.primary,
+  },
+  quickDateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
+  },
+  quickDateTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  pickerTriggerBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: THEME.colors.surfaceSubtle,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+    marginBottom: 6,
+  },
+  pickerTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pickerTriggerValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: THEME.colors.textPrimary,
+  },
+  pickerTriggerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pickerTriggerAction: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.primary,
+  },
+  quickHoursRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 8,
+  },
+  quickHourChip: {
+    backgroundColor: THEME.colors.surfaceSubtle,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  quickHourChipActive: {
+    backgroundColor: THEME.colors.primary,
+    borderColor: THEME.colors.primary,
+  },
+  quickHourText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
+  },
+  quickHourTextActive: {
+    color: '#FFF',
+    fontWeight: '800',
+  },
+  quickPriceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  quickPriceChip: {
+    flex: 1,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    paddingVertical: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  quickPriceChipActive: {
+    backgroundColor: THEME.colors.primary,
+    borderColor: THEME.colors.primary,
+  },
+  quickPriceText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
+  },
+  quickPriceTextActive: {
+    color: '#FFF',
+    fontWeight: '800',
+  },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -301,7 +519,7 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.primary,
     borderRadius: 12,
     paddingVertical: 14,
-    marginTop: 20,
+    marginTop: 22,
     marginBottom: 10,
     ...THEME.shadows.md,
   },
