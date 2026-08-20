@@ -59,18 +59,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.9
-          name: Tunky Chasky Admin v1.0.9 (Envío Automático de Correo y Corrección de Fecha SUNAT)
+          tag_name: v1.1.0
+          name: Tunky Chasky Admin v1.1.0 (Calendario Táctil, Selector de Horas y Hora de Compra)
           body: |
-            ## 📱 Tunky Chasky Admin v1.0.9
+            ## 📱 Tunky Chasky Admin v1.1.0
             
-            ### 📥 Descarga Directa:
-            Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
+            ### 📥 Descarga Directa del Instalador APK:
+            Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo en tu teléfono celular Android e instálalo para actualizar la aplicación.
             
-            ### ✨ Correcciones y Mejoras v1.0.9:
-            - **Envío Garantizado de Correo al Pasajero**: Conexión directa con la API de Resend para entregar de inmediato el correo con el Boleto de Viaje y comprobante electrónico PDF/XML.
-            - **Corrección de Fecha de Emisión SUNAT (Zona Horaria Perú)**: Solucionado el error `"La fecha del documento no puede ser mayor a la fecha de HOY"` generado al emitir de noche.
-            - **Compilación 100% Estable**: Sin cierres inesperados.
+            ### ✨ Novedades y Mejoras v1.1.0:
+            - **📅 Nuevo Calendario Táctil Mensual (`CalendarModal`)**: Selección visual de fechas en 1 solo toque, sin tener que escribir fechas manualmente con guiones.
+            - **⏰ Nuevo Selector Visual de Horas (`TimePickerModal`)**: Horarios frecuentes y selector de horas/minutos sin escribir dos puntos ni equivocarse en el formato.
+            - **⌨️ Corrección de Teclado Móvil (`KeyboardAvoidingView`)**: Los campos de texto (DNI, RUC, Nombres, Teléfono) ya no quedan cubiertos por el teclado del celular al rellenar información.
+            - **🕐 Registro y Muestra de Hora Exacta de Compra**: Cada venta muestra la fecha y hora exacta en la que se realizó la reserva (`🕐 Comprado el: DD/MM/YYYY, hh:mm A`).
+            - **Envío Automático de Correo con Boleta/Factura PDF y Boleto de Viaje**.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
