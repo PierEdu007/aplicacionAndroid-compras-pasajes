@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../lib/supabase';
+import { getPeruTodayString } from '../utils/dateHelper';
 
 export interface SunatConfig {
   enabled: boolean;
@@ -115,7 +116,7 @@ export async function emitirComprobanteSunat(
     cliente_denominacion: clienteNombre,
     cliente_direccion: data.direccionFiscal || 'CUSCO',
     cliente_email: data.email || 'reservas@turismotunkychasky.com.pe',
-    fecha_de_emision: new Date().toISOString().split('T')[0],
+    fecha_de_emision: getPeruTodayString(),
     moneda: 1,
     porcentaje_de_igv: config.tipoIgv === 1 ? 18.0 : 0.0,
     total_igv: 0.0,

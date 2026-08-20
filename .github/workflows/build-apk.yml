@@ -59,19 +59,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.0.8
-          name: Tunky Chasky Admin v1.0.8 (Corrección Total de Inicialización y Código 100% Limpio)
+          tag_name: v1.0.9
+          name: Tunky Chasky Admin v1.0.9 (Envío Automático de Correo y Corrección de Fecha SUNAT)
           body: |
-            ## 📱 Tunky Chasky Admin v1.0.8
+            ## 📱 Tunky Chasky Admin v1.0.9
             
             ### 📥 Descarga Directa:
             Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo e instálalo en tu teléfono Android.
             
-            ### ✨ Correcciones v1.0.8:
-            - **Solución al error `getPeruDate`**: Se importaron e integraron todas las utilidades de fecha de Perú sin advertencias.
-            - **Compilación TypeScript 100% Limpia**: Cero errores de sintaxis o importación.
-            - **Modo Inmersivo Permanente**: Los 3 botones inferiores se ocultan automáticamente.
-            - **Venta Presencial Completa**: Asientos 4P/6P actualizados y Asiento #1 Conductor bloqueado.
+            ### ✨ Correcciones y Mejoras v1.0.9:
+            - **Envío Garantizado de Correo al Pasajero**: Conexión directa con la API de Resend para entregar de inmediato el correo con el Boleto de Viaje y comprobante electrónico PDF/XML.
+            - **Corrección de Fecha de Emisión SUNAT (Zona Horaria Perú)**: Solucionado el error `"La fecha del documento no puede ser mayor a la fecha de HOY"` generado al emitir de noche.
+            - **Compilación 100% Estable**: Sin cierres inesperados.
           files: build-output/TunkyChaskyAdmin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
