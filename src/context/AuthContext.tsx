@@ -30,6 +30,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [role, setRole] = useState<Rol | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const AUTHORIZED_ADMIN_EMAILS = [
+    'admin@tunky.com',
+    'admin@turismotunkychasky.com.pe',
+  ];
+
   const resolveRole = async (currentUser: any) => {
     if (!currentUser) {
       setRole(null);
@@ -46,18 +51,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data && data.rol) {
         setRole(data.rol as Rol);
       } else {
-        // Fallback email heuristic
+        // Fallback: verificar lista blanca exacta de correos autorizados
         const email = currentUser.email?.toLowerCase() || '';
-        if (email.includes('admin') || email.includes('tunky')) {
+        if (AUTHORIZED_ADMIN_EMAILS.includes(email)) {
           setRole('ADMIN');
-        } else if (email.includes('contador')) {
-          setRole('CONTADOR');
         } else {
-          setRole('VENDEDOR');
+          setRole(null);
         }
       }
     } catch (_e) {
-      setRole('ADMIN');
+      setRole(null);
     }
   };
 

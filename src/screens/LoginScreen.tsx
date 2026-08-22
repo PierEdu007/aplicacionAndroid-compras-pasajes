@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,8 +20,29 @@ export const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lockoutSeconds]);
 
   const handleLogin = async () => {
+    if (lockoutSeconds > 0) {
+      Alert.alert('Acceso bloqueado', `Por seguridad, espera ${lockoutSeconds} segundos antes de intentar nuevamente.`);
+      return;
+    }
+
     if (!email.trim() || !password) {
       Alert.alert('Campos requeridos', 'Por favor ingresa tu correo y contraseña.');
       return;
@@ -32,7 +53,25 @@ export const LoginScreen: React.FC = () => {
     setLoading(false);
 
     if (!result.success) {
-      Alert.alert('Error de acceso', result.error || 'Credenciales incorrectas o usuario sin acceso.');
+      const newFails = failedAttempts + 1;
+      setFailedAttempts(newFails);
+
+      if (newFails >= 5) {
+        setLockoutSeconds(60);
+        Alert.alert(
+          'Acceso Bloqueado Temporalmente',
+          'Demasiados intentos fallidos consecutivos. El acceso ha sido bloqueado durante 60 segundos por seguridad.'
+        );
+      } else {
+        const remaining = 5 - newFails;
+        Alert.alert(
+          'Error de acceso',
+          `${result.error || 'Credenciales incorrectas o usuario sin acceso.'}\n\nIntentos restantes antes de bloqueo: ${remaining}`
+        );
+      }
+    } else {
+      setFailedAttempts(0);
+      setLockoutSeconds(0);
     }
   };
 
@@ -89,12 +128,14 @@ export const LoginScreen: React.FC = () => {
 
           {/* Submit Button */}
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.submitBtn, lockoutSeconds > 0 && { opacity: 0.6, backgroundColor: THEME.colors.textMuted }]}
             onPress={handleLogin}
-            disabled={loading}
+            disabled={loading || lockoutSeconds > 0}
           >
             {loading ? (
               <ActivityIndicator color="#FFF" />
+            ) : lockoutSeconds > 0 ? (
+              <Text style={styles.submitBtnText}>Bloqueado por seguridad ({lockoutSeconds}s)</Text>
             ) : (
               <>
                 <Text style={styles.submitBtnText}>Ingresar al Panel</Text>
