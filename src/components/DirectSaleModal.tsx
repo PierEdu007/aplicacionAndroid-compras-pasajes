@@ -74,6 +74,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
   const [apellidos, setApellidos] = useState('');
   const [razonSocial, setRazonSocial] = useState('');
   const [direccionFiscal, setDireccionFiscal] = useState('');
+  const [dniPasajero, setDniPasajero] = useState('');
+  const [lookingUpDniPasajero, setLookingUpDniPasajero] = useState(false);
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
 
@@ -245,6 +247,23 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     }
   };
 
+  const handleLookupDniPasajero = async () => {
+    const clean = dniPasajero.trim().replace(/\D/g, '');
+    if (clean.length === 8) {
+      setLookingUpDniPasajero(true);
+      const res = await lookupDni(clean);
+      setLookingUpDniPasajero(false);
+      if (res && res.nombres) {
+        setNombres(res.nombres);
+        setApellidos(`${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim());
+      } else {
+        Alert.alert('Aviso', 'DNI del pasajero no encontrado en RENIEC. Ingrese los nombres manualmente.');
+      }
+    } else {
+      Alert.alert('Formato inválido', 'El DNI del pasajero debe contener 8 dígitos numéricos.');
+    }
+  };
+
   const handleProcessSale = async () => {
     if (!activeTrip) {
       Alert.alert('Error', 'No hay un viaje activo seleccionado para este horario y vehículo.');
@@ -287,8 +306,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
           numero_asiento: selectedSeat,
           tipo_documento: tipoDoc,
           nro_documento: nroDoc.trim(),
-          nombres: tipoDoc === 'RUC' ? razonSocial.trim() : nombres.trim(),
-          apellidos: tipoDoc === 'RUC' ? '' : apellidos.trim(),
+          nombres: nombres.trim() || razonSocial.trim(),
+          apellidos: apellidos.trim(),
           email: email.trim() || 'reservas@turismotunkychasky.com.pe',
           telefono: telefono.trim(),
           monto_pagado: activeTrip.precio_base,
@@ -296,6 +315,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
           metodo_pago: metodoPago,
           razon_social: razonSocial.trim(),
           direccion_fiscal: direccionFiscal.trim(),
+          descripcion_opcional: dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : '',
           estado: 'CONFIRMADO',
           comprobante_emitido: true,
         })
@@ -330,6 +350,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         email: email.trim(),
         razonSocial,
         direccionFiscal,
+        descripcionOpcional: dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : '',
+        dniPasajero: dniPasajero.trim(),
         origen: activeTrip.rutas?.origen || 'CUSCO',
         destino: activeTrip.rutas?.destino || 'QUILLABAMBA',
         asiento: selectedSeat,
@@ -647,7 +669,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
             </View>
 
             {/* Nombres / Razón Social */}
-            {tipoDoc === 'RUC' ? (
+            {tipoDoc === 'RUC' && (
               <>
                 <Text style={styles.fieldLabel}>Razón Social de la Empresa:</Text>
                 <TextInput
@@ -666,31 +688,59 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                   placeholder="Dirección Fiscal para Factura"
                   placeholderTextColor="#94A3B8"
                 />
+
+                {/* DNI del Pasajero para Factura */}
+                <Text style={styles.fieldLabel}>DNI del Pasajero (Quien va a viajar):</Text>
+                <View style={styles.lookupRow}>
+                  <TextInput
+                    style={styles.inputFlex}
+                    value={dniPasajero}
+                    onChangeText={setDniPasajero}
+                    placeholder="Ej: 42339734"
+                    placeholderTextColor="#94A3B8"
+                    keyboardType="numeric"
+                    maxLength={8}
+                  />
+                  <TouchableOpacity
+                    style={styles.lookupBtn}
+                    onPress={handleLookupDniPasajero}
+                    disabled={lookingUpDniPasajero}
+                  >
+                    {lookingUpDniPasajero ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <>
+                        <Search size={14} color="#FFF" />
+                        <Text style={styles.lookupBtnText}>Consultar DNI</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </>
-            ) : (
-              <View style={styles.nameRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Nombres:</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={nombres}
-                    onChangeText={setNombres}
-                    placeholder="Nombres"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Apellidos:</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={apellidos}
-                    onChangeText={setApellidos}
-                    placeholder="Apellidos"
-                    placeholderTextColor="#94A3B8"
-                  />
-                </View>
-              </View>
             )}
+
+            <View style={styles.nameRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>{tipoDoc === 'RUC' ? 'Nombres Pasajero:' : 'Nombres:'}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={nombres}
+                  onChangeText={setNombres}
+                  placeholder="Nombres"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>{tipoDoc === 'RUC' ? 'Apellidos Pasajero:' : 'Apellidos:'}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={apellidos}
+                  onChangeText={setApellidos}
+                  placeholder="Apellidos"
+                  placeholderTextColor="#94A3B8"
+                />
+              </View>
+            </View>
 
             {/* Celular / WhatsApp */}
             <Text style={styles.fieldLabel}>Número de Celular / WhatsApp (Obligatorio):</Text>
