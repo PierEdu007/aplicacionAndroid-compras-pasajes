@@ -50,7 +50,7 @@ export async function getSunatConfig(): Promise<SunatConfig> {
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
-        enabled: parsed.enabled ?? false,
+        enabled: parsed.enabled ?? true,
         apiUrl: parsed.apiUrl || '',
         apiToken: parsed.apiToken || '',
         serieBoleta: parsed.serieBoleta || 'BBB1',
@@ -61,7 +61,7 @@ export async function getSunatConfig(): Promise<SunatConfig> {
   } catch (_e) {}
 
   return {
-    enabled: false,
+    enabled: true, // Habilitado por defecto para usar backend de producción
     apiUrl: '',
     apiToken: '',
     serieBoleta: 'BBB1',
@@ -80,10 +80,10 @@ export async function emitirComprobanteSunat(
 ): Promise<SunatResponse> {
   const config = customConfig || (await getSunatConfig());
 
-  if (!config.enabled || !config.apiUrl || !config.apiToken) {
+  if (config.enabled === false) {
     return {
       success: false,
-      error: 'La facturación SUNAT no está habilitada o faltan credenciales.',
+      error: 'La facturación SUNAT está deshabilitada en la configuración.',
     };
   }
 
