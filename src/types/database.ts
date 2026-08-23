@@ -100,7 +100,7 @@ export interface Venta {
   };
 }
 
-export type Rol = 'ADMIN' | 'VENDEDOR' | 'CONTADOR';
+export type Rol = 'ADMIN' | 'EMPLEADO' | 'VENDEDOR' | 'CONTADOR';
 
 export interface UserRole {
   id: string;

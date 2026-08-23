@@ -90,11 +90,19 @@ interface NewSaleAlert {
 }
 
 const MainNavigator: React.FC = () => {
-  const { user, loading } = useAuth();
-  const [currentTab, setCurrentTab] = useState<TabType>('DASHBOARD');
+  const { user, isAdmin, isEmpleado, loading } = useAuth();
+  const [currentTab, setCurrentTab] = useState<TabType>('SALES');
   const [isDirectSaleOpen, setIsDirectSaleOpen] = useState(false);
   const [isCreateTripOpen, setIsCreateTripOpen] = useState(false);
   const [pendingBadgeCount, setPendingBadgeCount] = useState(0);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setCurrentTab('DASHBOARD');
+    } else {
+      setCurrentTab('SALES');
+    }
+  }, [isAdmin]);
 
   // In-app alert banner
   const [newSaleAlert, setNewSaleAlert] = useState<NewSaleAlert | null>(null);
@@ -251,7 +259,7 @@ const MainNavigator: React.FC = () => {
 
       {/* Screen Content */}
       <View style={styles.contentContainer}>
-        {currentTab === 'DASHBOARD' && (
+        {currentTab === 'DASHBOARD' && isAdmin && (
           <DashboardScreen
             onNavigateToSales={() => setCurrentTab('SALES')}
             onNavigateToTrips={() => setCurrentTab('TRIPS')}
@@ -263,32 +271,34 @@ const MainNavigator: React.FC = () => {
           <SalesScreen onOpenDirectSale={() => setIsDirectSaleOpen(true)} />
         )}
         {currentTab === 'TRIPS' && <TripsScreen />}
-        {currentTab === 'ACCOUNTING' && <AccountingScreen />}
+        {currentTab === 'ACCOUNTING' && isAdmin && <AccountingScreen />}
       </View>
 
       {/* Bottom Tab Navigation Bar */}
       <View style={styles.bottomBar}>
-        {/* Tab 1: Dashboard */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          onPress={() => {
-            setCurrentTab('DASHBOARD');
-            Haptics.selectionAsync().catch(() => {});
-          }}
-        >
-          <LayoutDashboard
-            size={22}
-            color={currentTab === 'DASHBOARD' ? THEME.colors.primary : THEME.colors.textMuted}
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              currentTab === 'DASHBOARD' && styles.tabLabelActive,
-            ]}
+        {/* Tab 1: Dashboard (Solo ADMIN) */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => {
+              setCurrentTab('DASHBOARD');
+              Haptics.selectionAsync().catch(() => {});
+            }}
           >
-            Inicio
-          </Text>
-        </TouchableOpacity>
+            <LayoutDashboard
+              size={22}
+              color={currentTab === 'DASHBOARD' ? THEME.colors.primary : THEME.colors.textMuted}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                currentTab === 'DASHBOARD' && styles.tabLabelActive,
+              ]}
+            >
+              Inicio
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Tab 2: Ventas */}
         <TouchableOpacity
@@ -353,27 +363,29 @@ const MainNavigator: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        {/* Tab 4: Contabilidad */}
-        <TouchableOpacity
-          style={styles.tabButton}
-          onPress={() => {
-            setCurrentTab('ACCOUNTING');
-            Haptics.selectionAsync().catch(() => {});
-          }}
-        >
-          <FileSpreadsheet
-            size={22}
-            color={currentTab === 'ACCOUNTING' ? THEME.colors.primary : THEME.colors.textMuted}
-          />
-          <Text
-            style={[
-              styles.tabLabel,
-              currentTab === 'ACCOUNTING' && styles.tabLabelActive,
-            ]}
+        {/* Tab 4: Contabilidad (Solo ADMIN) */}
+        {isAdmin && (
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => {
+              setCurrentTab('ACCOUNTING');
+              Haptics.selectionAsync().catch(() => {});
+            }}
           >
-            Contable
-          </Text>
-        </TouchableOpacity>
+            <FileSpreadsheet
+              size={22}
+              color={currentTab === 'ACCOUNTING' ? THEME.colors.primary : THEME.colors.textMuted}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                currentTab === 'ACCOUNTING' && styles.tabLabelActive,
+              ]}
+            >
+              Contable
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Global Modals */}

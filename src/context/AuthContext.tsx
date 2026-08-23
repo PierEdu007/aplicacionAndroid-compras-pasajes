@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   isAdmin: boolean;
+  isEmpleado: boolean;
   isVendedor: boolean;
   isContador: boolean;
 }
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ success: false }),
   logout: async () => {},
   isAdmin: false,
+  isEmpleado: false,
   isVendedor: false,
   isContador: false,
 });
@@ -115,7 +117,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const isAdmin = role === 'ADMIN';
-  const isVendedor = role === 'VENDEDOR' || role === 'ADMIN';
+  const isEmpleado = role === 'EMPLEADO' || role === 'VENDEDOR' || role === 'ADMIN';
+  const isVendedor = role === 'VENDEDOR' || role === 'EMPLEADO' || role === 'ADMIN';
   const isContador = role === 'CONTADOR' || role === 'ADMIN';
 
   return (
@@ -127,6 +130,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         isAdmin,
+        isEmpleado,
         isVendedor,
         isContador,
       }}
