@@ -71,6 +71,10 @@ export async function generateAndShareTicket(venta: Venta): Promise<void> {
         <span class="bold">${rutaOrigen} ➔ ${rutaDestino}</span>
       </div>
       <div class="row">
+        <span>TIPO DE VEHÍCULO:</span>
+        <span class="bold" style="color: #0f4c81;">${(venta.culqi_charge_id?.includes('6P') || (venta.viajes as any)?.vehiculos?.total_asientos_pasajero === 6 || venta.numero_asiento > 5) ? 'CAMIONETA (6 PASAJEROS)' : 'AUTO (4 PASAJEROS)'}</span>
+      </div>
+      <div class="row">
         <span>FECHA / HORA:</span>
         <span class="bold">${fecha} ${hora}</span>
       </div>
