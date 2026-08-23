@@ -62,7 +62,7 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
       }
       if (vData && vData.length > 0) {
         setVehiculos(vData);
-        setSelectedVehiculoId(vData[0].id);
+        setSelectedVehiculoId('BOTH');
       }
     } catch (e) {
       console.error('Error cargando rutas/vehículos:', e);
