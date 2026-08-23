@@ -197,20 +197,31 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       // 1. Seat 1 is ALWAYS Conductor (driver) - never selectable
       occupied.add(1);
 
-      // 2. Ventas confirmadas
-      ventas?.forEach((v: any) => {
-        if (!v.culqi_charge_id?.startsWith('RECHAZADO_')) {
-          occupied.add(v.numero_asiento);
-        }
-      });
-
-      // 3. Bloqueos activos
+      // 2. Bloqueos activos
       const now = new Date();
-      bloqueos?.forEach((b: any) => {
+      const bloqueosList = (bloqueos as any[]) || [];
+      bloqueosList.forEach((b: any) => {
+        if (b.sesion_token?.includes('6P') && selectedVehicleType === '4P') return;
+        if (b.sesion_token?.includes('4P') && selectedVehicleType === '6P') return;
+
         if (b.estado === 'PAGADO') {
           occupied.add(b.numero_asiento);
         } else if (b.estado === 'BLOQUEADO' && new Date(b.expira_at) > now) {
           occupied.add(b.numero_asiento);
+        }
+      });
+
+      // 3. Ventas confirmadas
+      ventas?.forEach((v: any) => {
+        if (!v.culqi_charge_id?.startsWith('RECHAZADO_')) {
+          if (v.culqi_charge_id?.includes('TIPO:6P') && selectedVehicleType === '4P') return;
+          if (v.culqi_charge_id?.includes('TIPO:4P') && selectedVehicleType === '6P') return;
+
+          const matchingBloqueo = bloqueosList.find(b => b.numero_asiento === v.numero_asiento);
+          if (matchingBloqueo?.sesion_token?.includes('6P') && selectedVehicleType === '4P') return;
+          if (matchingBloqueo?.sesion_token?.includes('4P') && selectedVehicleType === '6P') return;
+
+          occupied.add(v.numero_asiento);
         }
       });
 
@@ -295,8 +306,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     try {
       const chargeId =
         metodoPago === 'YAPE'
-          ? `YAPE-${codigoOpYape || Date.now()}`
-          : `PRESENCIAL-${metodoPago}-${Date.now()}`;
+          ? `YAPE-${codigoOpYape || Date.now()}|TIPO:${selectedVehicleType}`
+          : `PRESENCIAL-${metodoPago}-${Date.now()}|TIPO:${selectedVehicleType}`;
 
       // 1. Insertar Venta en Supabase
       const { data: ventaData, error: vErr } = await supabase
@@ -336,7 +347,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         numero_asiento: selectedSeat,
         estado: 'PAGADO',
         expira_at: '2099-12-31T23:59:59Z',
-        sesion_token: 'PAGADO_PRESENCIAL',
+        sesion_token: `PAGADO_${selectedVehicleType}`,
       });
 
       // 3. Emitir Comprobante a NubeFact / SUNAT

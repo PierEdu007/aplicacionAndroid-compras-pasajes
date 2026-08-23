@@ -89,9 +89,7 @@ export async function emitirComprobanteSunat(
 
   const isFactura = data.tipoDocumento === 'RUC';
   const tipoComprobante = isFactura ? 1 : 2;
-  let serie = isFactura ? config.serieFactura || 'FFF1' : config.serieBoleta || 'BBB1';
-  if (serie === 'B001') serie = 'BBB1';
-  if (serie === 'F001') serie = 'FFF1';
+  const serie = isFactura ? config.serieFactura || 'FFF1' : config.serieBoleta || 'BBB1';
 
   let docTipoSunat = 1;
   if (data.tipoDocumento === 'RUC') docTipoSunat = 6;
@@ -107,6 +105,10 @@ export async function emitirComprobanteSunat(
     ? `${data.ventaId.slice(0, 8)}-${serie}-${Date.now()}`
     : `VENTA-${serie}-${Date.now()}`;
 
+  const todayStr = getPeruTodayString(); // YYYY-MM-DD
+  const [yyyy, mm, dd] = todayStr.split('-');
+  const fechaEmisionNubeFact = `${dd}-${mm}-${yyyy}`;
+
   const payload = {
     operacion: 'generar_comprobante',
     tipo_de_comprobante: tipoComprobante,
@@ -118,7 +120,7 @@ export async function emitirComprobanteSunat(
     cliente_denominacion: clienteNombre,
     cliente_direccion: data.direccionFiscal || 'CUSCO',
     cliente_email: data.email || 'reservas@turismotunkychasky.com.pe',
-    fecha_de_emision: getPeruTodayString(),
+    fecha_de_emision: fechaEmisionNubeFact,
     moneda: 1,
     porcentaje_de_igv: config.tipoIgv === 1 ? 18.0 : 0.0,
     total_igv: 0.0,
@@ -158,6 +160,40 @@ export async function emitirComprobanteSunat(
 
     if (!res.ok || result.errors) {
       const errMsg = typeof result.errors === 'string' ? result.errors : result.message || '';
+
+      // Auto-reintento con serie alternativa si la serie no está autorizada
+      if (result.codigo === 21 || errMsg.toLowerCase().includes('serie') || errMsg.toLowerCase().includes('autorizada')) {
+        const altSerie = isFactura 
+          ? (serie === 'FFF1' ? 'F001' : 'FFF1')
+          : (serie === 'BBB1' ? 'B001' : 'BBB1');
+        try {
+          const retryRes = await fetch(`${API_BASE_URL}/api/emitir-comprobante`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiUrl: config.apiUrl,
+              apiToken: config.apiToken,
+              payload: { ...payload, serie: altSerie },
+            }),
+          });
+          if (retryRes.ok) {
+            const retryResult = await retryRes.json();
+            if (!retryResult.errors && retryResult.enlace_del_pdf) {
+              return {
+                success: true,
+                serie: retryResult.serie,
+                numero: retryResult.numero,
+                pdfUrl: retryResult.enlace_del_pdf,
+                xmlUrl: retryResult.enlace_del_xml,
+                cdrUrl: retryResult.enlace_del_cdr,
+                qrCode: retryResult.cadena_para_codigo_qr,
+                sunatMessage: retryResult.sunat_description || 'Comprobante emitido correctamente ante SUNAT',
+              };
+            }
+          }
+        } catch (_retryErr) {}
+      }
+
       return {
         success: false,
         error: errMsg || 'Error al emitir comprobante en NubeFact/SUNAT',
