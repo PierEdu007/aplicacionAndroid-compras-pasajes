@@ -53,12 +53,34 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
 
   const loadFormData = async () => {
     try {
-      const { data: rData } = await supabase.from('rutas').select('*').eq('activa', true);
+      let { data: rData } = await supabase.from('rutas').select('*').eq('activa', true);
       const { data: vData } = await supabase.from('vehiculos').select('*').eq('activo', true);
 
-      if (rData && rData.length > 0) {
-        setRutas(rData);
-        setSelectedRutaId(rData[0].id);
+      let listRutas = rData || [];
+      const standardRoutes = [
+        { origen: 'CUSCO', destino: 'QUILLABAMBA', duracion_estimada: '06:00:00', activa: true },
+        { origen: 'QUILLABAMBA', destino: 'CUSCO', duracion_estimada: '06:00:00', activa: true },
+        { origen: 'QUILLABAMBA', destino: 'KITENI', duracion_estimada: '03:00:00', activa: true },
+        { origen: 'KITENI', destino: 'QUILLABAMBA', duracion_estimada: '03:00:00', activa: true },
+        { origen: 'CUSCO', destino: 'KITENI', duracion_estimada: '08:30:00', activa: true },
+        { origen: 'KITENI', destino: 'CUSCO', duracion_estimada: '08:30:00', activa: true },
+      ];
+
+      for (const st of standardRoutes) {
+        const found = listRutas.find(
+          (r: any) => r.origen.toUpperCase() === st.origen && r.destino.toUpperCase() === st.destino
+        );
+        if (!found) {
+          try {
+            const { data: newR } = await supabase.from('rutas').insert(st).select('*').single();
+            if (newR) listRutas.push(newR);
+          } catch (_e) {}
+        }
+      }
+
+      if (listRutas.length > 0) {
+        setRutas(listRutas);
+        setSelectedRutaId(listRutas[0].id);
       }
       if (vData && vData.length > 0) {
         setVehiculos(vData);
