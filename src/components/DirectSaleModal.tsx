@@ -11,6 +11,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Viaje, TipoDocumento } from '../types/database';
@@ -36,6 +37,9 @@ import {
   Phone,
   Mail,
   Armchair,
+  Sparkles,
+  Navigation,
+  FileText,
 } from 'lucide-react-native';
 
 interface DirectSaleModalProps {
@@ -51,6 +55,14 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [allViajes, setAllViajes] = useState<Viaje[]>([]);
+
+  // Modo de Venta: Regular (Salida Programada) vs Especial (Viaje No Programado / Ruta Libre)
+  const [saleMode, setSaleMode] = useState<'REGULAR' | 'ESPECIAL'>('REGULAR');
+  const [especialOrigen, setEspecialOrigen] = useState('');
+  const [especialDestino, setEspecialDestino] = useState('');
+  const [especialMonto, setEspecialMonto] = useState('100.00');
+  const [especialHora, setEspecialHora] = useState('08:00');
+  const [especialDescripcion, setEspecialDescripcion] = useState('');
 
   // Step 1: Filters (Fecha, Ruta, Hora)
   const [selectedDate, setSelectedDate] = useState(getPeruTodayString());
@@ -276,14 +288,32 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
   };
 
   const handleProcessSale = async () => {
-    if (!activeTrip) {
-      Alert.alert('Error', 'No hay un viaje activo seleccionado para este horario y vehículo.');
-      return;
-    }
+    const isEspecial = saleMode === 'ESPECIAL';
 
-    if (!selectedSeat || selectedSeat === 1) {
-      Alert.alert('Error', 'Por favor selecciona un asiento de pasajero válido.');
-      return;
+    if (!isEspecial) {
+      if (!activeTrip) {
+        Alert.alert('Error', 'No hay un viaje activo seleccionado para este horario y vehículo.');
+        return;
+      }
+
+      if (!selectedSeat || selectedSeat === 1) {
+        Alert.alert('Error', 'Por favor selecciona un asiento de pasajero válido.');
+        return;
+      }
+    } else {
+      if (!especialOrigen.trim()) {
+        Alert.alert('Error', 'Por favor ingresa la ciudad o punto de Origen del viaje especial.');
+        return;
+      }
+      if (!especialDestino.trim()) {
+        Alert.alert('Error', 'Por favor ingresa la ciudad o punto de Destino del viaje especial.');
+        return;
+      }
+      const montoNum = parseFloat(especialMonto);
+      if (isNaN(montoNum) || montoNum <= 0) {
+        Alert.alert('Error', 'Por favor ingresa un monto o precio válido mayor a 0.');
+        return;
+      }
     }
 
     if (tipoDoc === 'RUC' && (!nroDoc || !razonSocial)) {
@@ -292,41 +322,100 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     }
 
     if (tipoDoc !== 'RUC' && (!nroDoc || !nombres || !apellidos)) {
-      Alert.alert('Error', 'Ingresa el N° de documento, nombres y apellidos del pasajero.');
+      Alert.alert('Error', 'Ingresa el N° de documento, nombres y apellidos del cliente.');
       return;
     }
 
     if (!telefono.trim()) {
-      Alert.alert('Error', 'Ingresa el número de celular del pasajero para enviar su boleto.');
+      Alert.alert('Error', 'Ingresa el número de celular del cliente para enviar su comprobante.');
       return;
     }
 
     setLoading(true);
 
     try {
-      const chargeId =
-        metodoPago === 'YAPE'
-          ? `YAPE-${codigoOpYape || Date.now()}|TIPO:${selectedVehicleType}`
-          : `PRESENCIAL-${metodoPago}-${Date.now()}|TIPO:${selectedVehicleType}`;
+      const cleanO = isEspecial ? especialOrigen.trim().toUpperCase() : (activeTrip?.rutas?.origen || 'CUSCO');
+      const cleanD = isEspecial ? especialDestino.trim().toUpperCase() : (activeTrip?.rutas?.destino || 'QUILLABAMBA');
+      const finalMonto = isEspecial ? parseFloat(especialMonto) || 0 : (activeTrip?.precio_base || 0);
+      const finalDesc = isEspecial 
+        ? especialDescripcion.trim().toUpperCase() 
+        : (dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : '');
+
+      let tripId = activeTrip?.id;
+
+      if (isEspecial) {
+        // 1. Buscar o crear ruta en Supabase
+        let rutaId = '';
+        const { data: existingRuta } = await supabase
+          .from('rutas')
+          .select('id')
+          .ilike('origen', cleanO)
+          .ilike('destino', cleanD)
+          .maybeSingle();
+
+        if (existingRuta?.id) {
+          rutaId = existingRuta.id;
+        } else {
+          const { data: newRuta } = await (supabase.from('rutas') as any)
+            .insert({
+              origen: cleanO,
+              destino: cleanD,
+              duracion_estimada: '04:00:00',
+              activa: true,
+            })
+            .select('id')
+            .single();
+          if (newRuta?.id) rutaId = newRuta.id;
+        }
+
+        // 2. Obtener un vehículo disponible para asignar el viaje en la base de datos
+        const { data: defaultVehiculo } = await supabase.from('vehiculos').select('id').limit(1).maybeSingle();
+        const vehiculoId = defaultVehiculo?.id;
+
+        if (rutaId && vehiculoId) {
+          const { data: newViaje } = await (supabase.from('viajes') as any)
+            .insert({
+              ruta_id: rutaId,
+              vehiculo_id: vehiculoId,
+              fecha_viaje: selectedDate,
+              hora_viaje: especialHora ? (especialHora.length === 5 ? `${especialHora}:00` : especialHora) : '08:00:00',
+              precio_base: finalMonto,
+              estado: 'ACTIVO',
+            })
+            .select('id')
+            .single();
+          if (newViaje?.id) tripId = newViaje.id;
+        }
+
+        if (!tripId && allViajes.length > 0) {
+          tripId = allViajes[0].id;
+        }
+      }
+
+      const chargeId = isEspecial
+        ? `ESPECIAL-${metodoPago}-${Date.now()}|ORIGEN:${cleanO}|DESTINO:${cleanD}`
+        : (metodoPago === 'YAPE'
+            ? `YAPE-${codigoOpYape || Date.now()}|TIPO:${selectedVehicleType}`
+            : `PRESENCIAL-${metodoPago}-${Date.now()}|TIPO:${selectedVehicleType}`);
 
       // 1. Insertar Venta en Supabase
       const { data: ventaData, error: vErr } = await supabase
         .from('ventas')
         .insert({
-          viaje_id: activeTrip.id,
-          numero_asiento: selectedSeat,
+          viaje_id: tripId,
+          numero_asiento: isEspecial ? 0 : selectedSeat,
           tipo_documento: tipoDoc,
           nro_documento: nroDoc.trim(),
           nombres: nombres.trim() || razonSocial.trim(),
           apellidos: apellidos.trim(),
           email: email.trim() || 'reservas@turismotunkychasky.com.pe',
           telefono: telefono.trim(),
-          monto_pagado: activeTrip.precio_base,
+          monto_pagado: finalMonto,
           culqi_charge_id: chargeId,
           metodo_pago: metodoPago,
           razon_social: razonSocial.trim(),
           direccion_fiscal: direccionFiscal.trim(),
-          descripcion_opcional: dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : '',
+          descripcion_opcional: finalDesc,
           estado: 'CONFIRMADO',
           comprobante_emitido: true,
         })
@@ -335,20 +424,22 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 
       if (vErr) throw vErr;
 
-      // 2. Bloquear permanentemente el asiento en asientos_bloqueos
-      await supabase
-        .from('asientos_bloqueos')
-        .delete()
-        .eq('viaje_id', activeTrip.id)
-        .eq('numero_asiento', selectedSeat);
+      // 2. Si es regular, bloquear permanentemente el asiento en asientos_bloqueos
+      if (!isEspecial && selectedSeat && activeTrip?.id) {
+        await supabase
+          .from('asientos_bloqueos')
+          .delete()
+          .eq('viaje_id', activeTrip.id)
+          .eq('numero_asiento', selectedSeat);
 
-      await supabase.from('asientos_bloqueos').insert({
-        viaje_id: activeTrip.id,
-        numero_asiento: selectedSeat,
-        estado: 'PAGADO',
-        expira_at: '2099-12-31T23:59:59Z',
-        sesion_token: `PAGADO_${selectedVehicleType}`,
-      });
+        await supabase.from('asientos_bloqueos').insert({
+          viaje_id: activeTrip.id,
+          numero_asiento: selectedSeat,
+          estado: 'PAGADO',
+          expira_at: '2099-12-31T23:59:59Z',
+          sesion_token: `PAGADO_${selectedVehicleType}`,
+        });
+      }
 
       // 3. Emitir Comprobante a NubeFact / SUNAT
       let sunatResultData: any = undefined;
@@ -361,14 +452,15 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         email: email.trim(),
         razonSocial,
         direccionFiscal,
-        descripcionOpcional: dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : '',
-        dniPasajero: dniPasajero.trim(),
-        origen: activeTrip.rutas?.origen || 'CUSCO',
-        destino: activeTrip.rutas?.destino || 'QUILLABAMBA',
-        asiento: selectedSeat,
-        monto: activeTrip.precio_base,
-        fechaViaje: activeTrip.fecha_viaje,
-        horaViaje: activeTrip.hora_viaje,
+        descripcionOpcional: finalDesc,
+        dniPasajero: isEspecial ? '' : dniPasajero.trim(),
+        origen: cleanO,
+        destino: cleanD,
+        asiento: isEspecial ? 0 : (selectedSeat || 1),
+        monto: finalMonto,
+        fechaViaje: selectedDate,
+        horaViaje: isEspecial ? (especialHora || '08:00') : (activeTrip?.hora_viaje || '08:00'),
+        esViajeEspecial: isEspecial,
       });
 
       if (sunatRes.success && sunatRes.pdfUrl) {
@@ -393,34 +485,78 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         await sendConfirmationEmail(ventaData as any, sunatResultData);
       }
 
-      // 5. Ofrecer compartir o imprimir boleto
-      Alert.alert(
-        '✅ Venta Registrada con Éxito',
-        `Pasaje vendido para Asiento #${selectedSeat} (${activeTrip.rutas?.origen} ➔ ${activeTrip.rutas?.destino}).\n\nComprobante SUNAT: ${
-          sunatRes.serie ? `${sunatRes.serie}-${sunatRes.numero}` : 'Generado'
-        }\n\n¿Deseas enviar el boleto de viaje por WhatsApp al pasajero?`,
-        [
-          {
-            text: 'Cerrar',
-            onPress: () => {
-              onSaleComplete();
-              onClose();
+      // 5. Ofrecer compartir comprobante oficial
+      const compTipo = tipoDoc === 'RUC' ? 'Factura Electrónica' : 'Boleta de Venta Electrónica';
+      const compNro = sunatRes.serie ? `${sunatRes.serie}-${sunatRes.numero}` : 'Generado';
+
+      if (isEspecial) {
+        // En VIAJE ESPECIAL: NO se genera boleto de viaje por asiento, SOLO Factura / Boleta SUNAT
+        Alert.alert(
+          '✅ Comprobante Emitido con Éxito',
+          `Se emitió la ${compTipo} (${compNro}) para el Viaje Especial:\n\n• Ruta: ${cleanO} ➔ ${cleanD}\n• Total: S/ ${finalMonto.toFixed(2)}\n• Cliente: ${nombres.trim() || razonSocial.trim()}`,
+          [
+            {
+              text: 'Cerrar',
+              onPress: () => {
+                onSaleComplete();
+                onClose();
+              },
             },
-          },
-          {
-            text: '📱 Enviar por WhatsApp',
-            onPress: async () => {
-              await generateAndShareTicket({
-                ...ventaData,
-                nro_comprobante: sunatRes.serie ? `${sunatRes.serie}-${sunatRes.numero}` : undefined,
-                viajes: activeTrip,
-              } as any);
-              onSaleComplete();
-              onClose();
+            {
+              text: '📱 Enviar por WhatsApp',
+              onPress: () => {
+                if (sunatRes.pdfUrl) {
+                  const textMsg = encodeURIComponent(
+                    `*INVERSIONES TUNKY CHASKY S.R.L.*\n\nEstimado(a) *${nombres.trim() || razonSocial.trim()}*,\nLe adjuntamos su *${compTipo} ${compNro}* por el servicio de transporte *${cleanO} ➔ ${cleanD}*.\n\n📄 *Descargar Comprobante PDF (SUNAT):*\n${sunatRes.pdfUrl}\n\n¡Gracias por su preferencia!`
+                  );
+                  const cleanPhone = telefono.trim().replace(/\D/g, '');
+                  const phoneWithCode = cleanPhone.startsWith('51') ? cleanPhone : `51${cleanPhone}`;
+                  Linking.openURL(`https://wa.me/${phoneWithCode}?text=${textMsg}`);
+                }
+                onSaleComplete();
+                onClose();
+              },
             },
-          },
-        ]
-      );
+            {
+              text: '📄 Ver PDF',
+              onPress: () => {
+                if (sunatRes.pdfUrl) {
+                  Linking.openURL(sunatRes.pdfUrl);
+                }
+                onSaleComplete();
+                onClose();
+              },
+            },
+          ]
+        );
+      } else {
+        // En VIAJE REGULAR: Ofrecer compartir boleto de viaje por asiento
+        Alert.alert(
+          '✅ Venta Registrada con Éxito',
+          `Pasaje vendido para Asiento #${selectedSeat} (${activeTrip?.rutas?.origen} ➔ ${activeTrip?.rutas?.destino}).\n\nComprobante SUNAT: ${compNro}\n\n¿Deseas enviar el boleto de viaje por WhatsApp al pasajero?`,
+          [
+            {
+              text: 'Cerrar',
+              onPress: () => {
+                onSaleComplete();
+                onClose();
+              },
+            },
+            {
+              text: '📱 Enviar por WhatsApp',
+              onPress: async () => {
+                await generateAndShareTicket({
+                  ...ventaData,
+                  nro_comprobante: sunatRes.serie ? `${sunatRes.serie}-${sunatRes.numero}` : undefined,
+                  viajes: activeTrip,
+                } as any);
+                onSaleComplete();
+                onClose();
+              },
+            },
+          ]
+        );
+      }
     } catch (err: any) {
       console.error('Error procesando venta:', err);
       Alert.alert('Error', err.message || 'No se pudo completar la venta.');
@@ -466,178 +602,286 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: 220 }}
           >
-            {/* 1. SELECCIONAR FECHA */}
-            <Text style={styles.stepTitle}>1. Seleccionar Fecha y Salida</Text>
-            <View style={styles.dateSelectorRow}>
+            {/* SELECTOR DE MODO: SALIDA REGULAR VS VIAJE ESPECIAL */}
+            <View style={styles.modeTabsRow}>
               <TouchableOpacity
-                style={[styles.dateChip, selectedDate === getPeruTodayString() && styles.chipActive]}
-                onPress={() => setSelectedDate(getPeruTodayString())}
+                style={[styles.modeTab, saleMode === 'REGULAR' && styles.modeTabActive]}
+                onPress={() => setSaleMode('REGULAR')}
               >
-                <Calendar size={14} color={selectedDate === getPeruTodayString() ? '#FFF' : THEME.colors.textSecondary} />
-                <Text style={[styles.chipText, selectedDate === getPeruTodayString() && styles.textWhite]}>
-                  Hoy ({formatPeruDateDisplay(getPeruTodayString()).substring(0, 5)})
+                <Navigation size={14} color={saleMode === 'REGULAR' ? '#FFF' : THEME.colors.primary} />
+                <Text style={[styles.modeTabText, saleMode === 'REGULAR' && styles.textWhite]}>
+                  Salida Regular (Pasajes)
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.dateChip, selectedDate === getPeruTomorrowString() && styles.chipActive]}
-                onPress={() => setSelectedDate(getPeruTomorrowString())}
+                style={[styles.modeTab, saleMode === 'ESPECIAL' && styles.modeTabSpecialActive]}
+                onPress={() => setSaleMode('ESPECIAL')}
               >
-                <Calendar size={14} color={selectedDate === getPeruTomorrowString() ? '#FFF' : THEME.colors.textSecondary} />
-                <Text style={[styles.chipText, selectedDate === getPeruTomorrowString() && styles.textWhite]}>
-                  Mañana ({formatPeruDateDisplay(getPeruTomorrowString()).substring(0, 5)})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.dateChip, 
-                  selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() && styles.chipActive
-                ]}
-                onPress={() => setShowCalendar(true)}
-              >
-                <Calendar size={14} color={selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() ? '#FFF' : THEME.colors.primary} />
-                <Text style={[
-                  styles.chipText, 
-                  selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() && styles.textWhite
-                ]}>
-                  {selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() 
-                    ? formatPeruDateDisplay(selectedDate).substring(0, 5) 
-                    : '📅 Calendario'}
+                <Sparkles size={14} color={saleMode === 'ESPECIAL' ? '#FFF' : '#742284'} />
+                <Text style={[styles.modeTabText, saleMode === 'ESPECIAL' && styles.textWhite]}>
+                  ✨ Viaje Especial (Ruta Libre)
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {/* Selector de Ruta */}
-            <Text style={styles.subLabel}>Ruta:</Text>
-            <View style={styles.wrapRow}>
-              {availableRoutes.map((rStr) => (
-                <TouchableOpacity
-                  key={rStr}
-                  style={[styles.routeChip, selectedRouteKey === rStr && styles.chipActive]}
-                  onPress={() => setSelectedRouteKey(rStr)}
-                >
-                  <MapPin size={13} color={selectedRouteKey === rStr ? '#FFF' : THEME.colors.primary} />
-                  <Text style={[styles.chipText, selectedRouteKey === rStr && styles.textWhite]}>{rStr}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Selector de Horario */}
-            <Text style={styles.subLabel}>Hora de Salida:</Text>
-            <View style={styles.wrapRow}>
-              {availableHours.length === 0 ? (
-                <Text style={styles.emptyNotice}>⚠️ No hay salidas programadas para esta fecha y ruta.</Text>
-              ) : (
-                availableHours.map((h) => (
-                  <TouchableOpacity
-                    key={h}
-                    style={[styles.timeChip, selectedTime === h && styles.chipActive]}
-                    onPress={() => setSelectedTime(h)}
-                  >
-                    <Clock size={13} color={selectedTime === h ? '#FFF' : THEME.colors.textPrimary} />
-                    <Text style={[styles.chipText, selectedTime === h && styles.textWhite]}>{h}</Text>
-                  </TouchableOpacity>
-                ))
-              )}
-            </View>
-
-            {/* 2. SELECCIONAR TIPO DE VEHÍCULO */}
-            <Text style={styles.stepTitle}>2. Seleccionar Tipo de Vehículo</Text>
-            <View style={styles.vehicleRow}>
-              <TouchableOpacity
-                style={[styles.vehicleBtn, selectedVehicleType === '4P' && styles.vehicleBtnActive]}
-                onPress={() => setSelectedVehicleType('4P')}
-              >
-                <Car size={20} color={selectedVehicleType === '4P' ? '#FFF' : THEME.colors.primary} />
-                <View>
-                  <Text style={[styles.vehicleTitle, selectedVehicleType === '4P' && styles.textWhite]}>
-                    Camioneta 4 Pasajeros
-                  </Text>
-                  <Text style={[styles.vehicleSub, selectedVehicleType === '4P' && styles.textWhiteSubtle]}>
-                    4 Asientos disponibles
+            {saleMode === 'ESPECIAL' ? (
+              /* ==================== MODO VIAJE ESPECIAL (RUTA LIBRE / SIN ASIENTOS) ==================== */
+              <View>
+                <View style={styles.specialCardBanner}>
+                  <Sparkles size={18} color="#742284" />
+                  <Text style={styles.specialCardText}>
+                    En viajes especiales no se asigna vehículo ni asiento. Se emite directamente la Factura o Boleta Electrónica de SUNAT.
                   </Text>
                 </View>
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.vehicleBtn, selectedVehicleType === '6P' && styles.vehicleBtnActive]}
-                onPress={() => setSelectedVehicleType('6P')}
-              >
-                <Car size={20} color={selectedVehicleType === '6P' ? '#FFF' : THEME.colors.primary} />
-                <View>
-                  <Text style={[styles.vehicleTitle, selectedVehicleType === '6P' && styles.textWhite]}>
-                    Camioneta 6 Pasajeros
-                  </Text>
-                  <Text style={[styles.vehicleSub, selectedVehicleType === '6P' && styles.textWhiteSubtle]}>
-                    6 Asientos disponibles
-                  </Text>
+                <Text style={styles.stepTitle}>1. Origen, Destino y Tarifa del Viaje Especial</Text>
+
+                {/* Origen y Destino */}
+                <View style={styles.nameRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Ciudad de Origen (Salida):</Text>
+                    <TextInput
+                      style={[styles.input, { fontWeight: '700' }]}
+                      value={especialOrigen}
+                      onChangeText={(text) => setEspecialOrigen(text.toUpperCase())}
+                      placeholder="Ej: CUSCO"
+                      placeholderTextColor="#94A3B8"
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Ciudad de Destino (Llegada):</Text>
+                    <TextInput
+                      style={[styles.input, { fontWeight: '700' }]}
+                      value={especialDestino}
+                      onChangeText={(text) => setEspecialDestino(text.toUpperCase())}
+                      placeholder="Ej: KITENI, OCONGATE"
+                      placeholderTextColor="#94A3B8"
+                      autoCapitalize="characters"
+                    />
+                  </View>
                 </View>
-              </TouchableOpacity>
-            </View>
 
-            {/* 3. SELECCIONAR ASIENTO */}
-            <Text style={styles.stepTitle}>3. Seleccionar Asiento</Text>
-            <View style={styles.seatLegend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: THEME.colors.seatAvailable }]} />
-                <Text style={styles.legendText}>Disponible</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: THEME.colors.seatSold }]} />
-                <Text style={styles.legendText}>Ocupado</Text>
-              </View>
-            </View>
-
-            <View style={styles.seatsGrid}>
-              {/* Asiento 1 - Conductor (No seleccionable) */}
-              <View style={[styles.seatCard, styles.seatDriver]}>
-                <Armchair size={16} color="#94A3B8" />
-                <Text style={styles.seatDriverText}>🪑 Conductor (Chofer)</Text>
-              </View>
-
-              {/* Passenger Seats */}
-              {passengerSeats.map((seatNum) => {
-                const isOccupied = occupiedSeats.has(seatNum);
-                const isSelected = selectedSeat === seatNum;
-
-                return (
-                  <TouchableOpacity
-                    key={seatNum}
-                    style={[
-                      styles.seatCard,
-                      isOccupied && styles.seatOccupied,
-                      !isOccupied && styles.seatAvailable,
-                      isSelected && styles.seatSelected,
-                    ]}
-                    disabled={isOccupied}
-                    onPress={() => setSelectedSeat(seatNum)}
-                  >
-                    <Armchair size={16} color={isSelected ? '#FFF' : isOccupied ? '#FFF' : THEME.colors.primary} />
-                    <Text
-                      style={[
-                        styles.seatText,
-                        isSelected && styles.textWhite,
-                        isOccupied && styles.textWhite,
-                      ]}
+                {/* Fecha y Tarifa Total */}
+                <View style={styles.nameRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Fecha del Servicio:</Text>
+                    <TouchableOpacity
+                      style={styles.dateSelectorBtn}
+                      onPress={() => setShowCalendar(true)}
                     >
-                      {getSeatLabel(seatNum)} {isOccupied ? '(Ocupado)' : ''}
+                      <Calendar size={14} color={THEME.colors.primary} />
+                      <Text style={styles.dateSelectorBtnText}>{formatPeruDateDisplay(selectedDate)}</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>Monto Total Pactado (S/):</Text>
+                    <TextInput
+                      style={[styles.input, { fontWeight: '800', color: THEME.colors.primary }]}
+                      value={especialMonto}
+                      onChangeText={setEspecialMonto}
+                      placeholder="Ej: 150.00"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </View>
+
+                {/* Descripción / Detalle del Viaje Especial */}
+                <Text style={styles.fieldLabel}>Descripción / Detalle del Viaje Especial (Opcional):</Text>
+                <TextInput
+                  style={styles.input}
+                  value={especialDescripcion}
+                  onChangeText={(text) => setEspecialDescripcion(text.toUpperCase())}
+                  placeholder="Ej: TRASLADO PRIVADO HOTEL / SERVICIO EXCLUSIVO"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="characters"
+                />
+                <Text style={styles.descHelpText}>
+                  💡 Se imprimirá en SUNAT: SERVICIO DE TRANSPORTE {especialOrigen || '(ORIGEN)'} {especialDestino || '(DESTINO)'} {especialDescripcion}
+                </Text>
+              </View>
+            ) : (
+              /* ==================== MODO SALIDA REGULAR (HORARIO, VEHÍCULO Y ASIENTO) ==================== */
+              <View>
+                {/* 1. SELECCIONAR FECHA */}
+                <Text style={styles.stepTitle}>1. Seleccionar Fecha y Salida</Text>
+                <View style={styles.dateSelectorRow}>
+                  <TouchableOpacity
+                    style={[styles.dateChip, selectedDate === getPeruTodayString() && styles.chipActive]}
+                    onPress={() => setSelectedDate(getPeruTodayString())}
+                  >
+                    <Calendar size={14} color={selectedDate === getPeruTodayString() ? '#FFF' : THEME.colors.textSecondary} />
+                    <Text style={[styles.chipText, selectedDate === getPeruTodayString() && styles.textWhite]}>
+                      Hoy ({formatPeruDateDisplay(getPeruTodayString()).substring(0, 5)})
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
 
-            {/* Price Badge */}
-            {activeTrip && (
-              <View style={styles.priceSummaryBox}>
-                <Text style={styles.priceSummaryLabel}>Precio del Pasaje:</Text>
-                <Text style={styles.priceSummaryValue}>S/ {Number(activeTrip.precio_base).toFixed(2)}</Text>
+                  <TouchableOpacity
+                    style={[styles.dateChip, selectedDate === getPeruTomorrowString() && styles.chipActive]}
+                    onPress={() => setSelectedDate(getPeruTomorrowString())}
+                  >
+                    <Calendar size={14} color={selectedDate === getPeruTomorrowString() ? '#FFF' : THEME.colors.textSecondary} />
+                    <Text style={[styles.chipText, selectedDate === getPeruTomorrowString() && styles.textWhite]}>
+                      Mañana ({formatPeruDateDisplay(getPeruTomorrowString()).substring(0, 5)})
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.dateChip, 
+                      selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() && styles.chipActive
+                    ]}
+                    onPress={() => setShowCalendar(true)}
+                  >
+                    <Calendar size={14} color={selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() ? '#FFF' : THEME.colors.primary} />
+                    <Text style={[
+                      styles.chipText, 
+                      selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() && styles.textWhite
+                    ]}>
+                      {selectedDate !== getPeruTodayString() && selectedDate !== getPeruTomorrowString() 
+                        ? formatPeruDateDisplay(selectedDate).substring(0, 5) 
+                        : '📅 Calendario'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Selector de Ruta */}
+                <Text style={styles.subLabel}>Ruta:</Text>
+                <View style={styles.wrapRow}>
+                  {availableRoutes.map((rStr) => (
+                    <TouchableOpacity
+                      key={rStr}
+                      style={[styles.routeChip, selectedRouteKey === rStr && styles.chipActive]}
+                      onPress={() => setSelectedRouteKey(rStr)}
+                    >
+                      <MapPin size={13} color={selectedRouteKey === rStr ? '#FFF' : THEME.colors.primary} />
+                      <Text style={[styles.chipText, selectedRouteKey === rStr && styles.textWhite]}>{rStr}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Selector de Horario */}
+                <Text style={styles.subLabel}>Hora de Salida:</Text>
+                <View style={styles.wrapRow}>
+                  {availableHours.length === 0 ? (
+                    <Text style={styles.emptyNotice}>⚠️ No hay salidas programadas para esta fecha y ruta.</Text>
+                  ) : (
+                    availableHours.map((h) => (
+                      <TouchableOpacity
+                        key={h}
+                        style={[styles.timeChip, selectedTime === h && styles.chipActive]}
+                        onPress={() => setSelectedTime(h)}
+                      >
+                        <Clock size={13} color={selectedTime === h ? '#FFF' : THEME.colors.textPrimary} />
+                        <Text style={[styles.chipText, selectedTime === h && styles.textWhite]}>{h}</Text>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+
+                {/* 2. SELECCIONAR TIPO DE VEHÍCULO */}
+                <Text style={styles.stepTitle}>2. Seleccionar Tipo de Vehículo</Text>
+                <View style={styles.vehicleRow}>
+                  <TouchableOpacity
+                    style={[styles.vehicleBtn, selectedVehicleType === '4P' && styles.vehicleBtnActive]}
+                    onPress={() => setSelectedVehicleType('4P')}
+                  >
+                    <Car size={20} color={selectedVehicleType === '4P' ? '#FFF' : THEME.colors.primary} />
+                    <View>
+                      <Text style={[styles.vehicleTitle, selectedVehicleType === '4P' && styles.textWhite]}>
+                        Camioneta 4 Pasajeros
+                      </Text>
+                      <Text style={[styles.vehicleSub, selectedVehicleType === '4P' && styles.textWhiteSubtle]}>
+                        4 Asientos disponibles
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.vehicleBtn, selectedVehicleType === '6P' && styles.vehicleBtnActive]}
+                    onPress={() => setSelectedVehicleType('6P')}
+                  >
+                    <Car size={20} color={selectedVehicleType === '6P' ? '#FFF' : THEME.colors.primary} />
+                    <View>
+                      <Text style={[styles.vehicleTitle, selectedVehicleType === '6P' && styles.textWhite]}>
+                        Camioneta 6 Pasajeros
+                      </Text>
+                      <Text style={[styles.vehicleSub, selectedVehicleType === '6P' && styles.textWhiteSubtle]}>
+                        6 Asientos disponibles
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
+                {/* 3. SELECCIONAR ASIENTO */}
+                <Text style={styles.stepTitle}>3. Seleccionar Asiento</Text>
+                <View style={styles.seatLegend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: THEME.colors.seatAvailable }]} />
+                    <Text style={styles.legendText}>Disponible</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: THEME.colors.seatSold }]} />
+                    <Text style={styles.legendText}>Ocupado</Text>
+                  </View>
+                </View>
+
+                <View style={styles.seatsGrid}>
+                  {/* Asiento 1 - Conductor (No seleccionable) */}
+                  <View style={[styles.seatCard, styles.seatDriver]}>
+                    <Armchair size={16} color="#94A3B8" />
+                    <Text style={styles.seatDriverText}>🪑 Conductor (Chofer)</Text>
+                  </View>
+
+                  {/* Passenger Seats */}
+                  {passengerSeats.map((seatNum) => {
+                    const isOccupied = occupiedSeats.has(seatNum);
+                    const isSelected = selectedSeat === seatNum;
+
+                    return (
+                      <TouchableOpacity
+                        key={seatNum}
+                        style={[
+                          styles.seatCard,
+                          isOccupied && styles.seatOccupied,
+                          !isOccupied && styles.seatAvailable,
+                          isSelected && styles.seatSelected,
+                        ]}
+                        disabled={isOccupied}
+                        onPress={() => setSelectedSeat(seatNum)}
+                      >
+                        <Armchair size={16} color={isSelected ? '#FFF' : isOccupied ? '#FFF' : THEME.colors.primary} />
+                        <Text
+                          style={[
+                            styles.seatText,
+                            isSelected && styles.textWhite,
+                            isOccupied && styles.textWhite,
+                          ]}
+                        >
+                          {getSeatLabel(seatNum)} {isOccupied ? '(Ocupado)' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Price Badge */}
+                {activeTrip && (
+                  <View style={styles.priceSummaryBox}>
+                    <Text style={styles.priceSummaryLabel}>Precio del Pasaje:</Text>
+                    <Text style={styles.priceSummaryValue}>S/ {Number(activeTrip.precio_base).toFixed(2)}</Text>
+                  </View>
+                )}
               </View>
             )}
 
             {/* 4. DATOS DEL PASAJERO */}
-            <Text style={styles.stepTitle}>4. Datos del Pasajero y Comprobante</Text>
+            <Text style={styles.stepTitle}>
+              {saleMode === 'ESPECIAL' ? '2. Datos del Cliente / Facturación' : '4. Datos del Pasajero y Comprobante'}
+            </Text>
             <View style={styles.docTypeRow}>
               {(['DNI', 'RUC', 'CE', 'PASAPORTE'] as TipoDocumento[]).map((t) => (
                 <TouchableOpacity
@@ -782,8 +1026,10 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               />
             </View>
 
-            {/* 5. MÉTODO DE PAGO */}
-            <Text style={styles.stepTitle}>5. Método de Pago</Text>
+            {/* MÉTODO DE PAGO */}
+            <Text style={styles.stepTitle}>
+              {saleMode === 'ESPECIAL' ? '3. Método de Pago' : '5. Método de Pago'}
+            </Text>
             <View style={styles.paymentMethodsRow}>
               <TouchableOpacity
                 style={[styles.payMethodBtn, metodoPago === 'EFECTIVO' && styles.chipActive]}
@@ -832,7 +1078,10 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 
             {/* BOTÓN FINAL DE EMISIÓN */}
             <TouchableOpacity
-              style={styles.submitBtn}
+              style={[
+                styles.submitBtn,
+                saleMode === 'ESPECIAL' && { backgroundColor: '#742284' }
+              ]}
               onPress={handleProcessSale}
               disabled={loading}
             >
@@ -840,8 +1089,16 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                 <ActivityIndicator color="#FFF" />
               ) : (
                 <>
-                  <CheckCircle size={18} color="#FFF" />
-                  <Text style={styles.submitBtnText}>Confirmar y Emitir Boleto SUNAT</Text>
+                  {saleMode === 'ESPECIAL' ? (
+                    <FileText size={18} color="#FFF" />
+                  ) : (
+                    <CheckCircle size={18} color="#FFF" />
+                  )}
+                  <Text style={styles.submitBtnText}>
+                    {saleMode === 'ESPECIAL'
+                      ? `Emitir ${tipoDoc === 'RUC' ? 'Factura' : 'Boleta'} SUNAT (S/ ${Number(parseFloat(especialMonto) || 0).toFixed(2)})`
+                      : 'Confirmar y Emitir Boleto SUNAT'}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -890,6 +1147,78 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     padding: 6,
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    borderWidth: 1.5,
+    borderColor: THEME.colors.border,
+  },
+  modeTabActive: {
+    backgroundColor: THEME.colors.primary,
+    borderColor: THEME.colors.primary,
+  },
+  modeTabSpecialActive: {
+    backgroundColor: '#742284',
+    borderColor: '#742284',
+  },
+  modeTabText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: THEME.colors.textPrimary,
+  },
+  specialCardBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  specialCardText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#6B21A8',
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  dateSelectorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: THEME.colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  dateSelectorBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  descHelpText: {
+    fontSize: 11,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginBottom: 4,
   },
   stepTitle: {
     fontSize: 14,
