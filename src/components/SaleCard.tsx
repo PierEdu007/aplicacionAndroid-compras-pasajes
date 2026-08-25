@@ -88,8 +88,24 @@ export const SaleCard: React.FC<SaleCardProps> = ({
           <Text style={styles.routeText}>
             {venta.viajes?.rutas?.origen || 'CUSCO'} ➔ {venta.viajes?.rutas?.destino || 'QUILLABAMBA'}
           </Text>
-          <View style={styles.seatBadge}>
-            <Text style={styles.seatBadgeText}>Asiento #{venta.numero_asiento}</Text>
+          <View style={[
+            styles.seatBadge,
+            (venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL')) && {
+              backgroundColor: '#FAF5FF',
+              borderColor: '#E9D5FF',
+            }
+          ]}>
+            <Text style={[
+              styles.seatBadgeText,
+              (venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL')) && {
+                color: '#742284',
+                fontWeight: '800',
+              }
+            ]}>
+              {venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL')
+                ? '✨ Especial'
+                : `Asiento #${venta.numero_asiento}`}
+            </Text>
           </View>
         </View>
 

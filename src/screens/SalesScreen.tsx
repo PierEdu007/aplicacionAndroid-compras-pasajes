@@ -29,7 +29,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'CONFIRMED'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'ESPECIAL'>('ALL');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const loadSales = async () => {
@@ -63,6 +63,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
     setProcessingId(venta.id);
     try {
       // 1. Emitir comprobante a NubeFact / SUNAT
+      const isSpecial = venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL');
       const sunatRes = await emitirComprobanteSunat({
         ventaId: venta.id,
         tipoDocumento: venta.tipo_documento,
@@ -72,12 +73,14 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
         email: venta.email,
         razonSocial: venta.razon_social,
         direccionFiscal: venta.direccion_fiscal,
+        descripcionOpcional: venta.descripcion_opcional,
         origen: venta.viajes?.rutas?.origen || 'CUSCO',
         destino: venta.viajes?.rutas?.destino || 'QUILLABAMBA',
         asiento: venta.numero_asiento,
         monto: Number(venta.monto_pagado),
         fechaViaje: venta.viajes?.fecha_viaje || '',
         horaViaje: venta.viajes?.hora_viaje || '',
+        esViajeEspecial: isSpecial,
       });
 
       const finalUrl = sunatRes.pdfUrl || venta.comprobante_url;
@@ -154,12 +157,12 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
                   .eq('numero_asiento', venta.numero_asiento);
               }
 
-              // Marcar como rechazado
+              // Marcar como rechazada
               await supabase
                 .from('ventas')
                 .update({
                   estado: 'RECHAZADO',
-                  culqi_charge_id: `RECHAZADO_${venta.culqi_charge_id}`,
+                  culqi_charge_id: `RECHAZADO_${Date.now()}`,
                 })
                 .eq('id', venta.id);
 
@@ -169,14 +172,15 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
                     ? {
                         ...v,
                         estado: 'RECHAZADO',
-                        culqi_charge_id: `RECHAZADO_${v.culqi_charge_id}`,
+                        culqi_charge_id: `RECHAZADO_${Date.now()}`,
                       }
                     : v
                 )
               );
 
-              Alert.alert('Aviso', 'El pago fue rechazado y el asiento ha sido liberado.');
+              Alert.alert('Aviso', 'Pago rechazado y asiento liberado.');
             } catch (err: any) {
+              console.error('Error rechazando pago:', err);
               Alert.alert('Error', err.message || 'No se pudo rechazar.');
             } finally {
               setProcessingId(null);
@@ -223,8 +227,11 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
     if (!matchesSearch) return false;
 
     const isConfirmed = v.comprobante_emitido || v.estado === 'CONFIRMADO';
+    const isSpecial = v.numero_asiento === 0 || v.culqi_charge_id?.includes('ESPECIAL');
+
     if (filterStatus === 'PENDING') return !isConfirmed && v.estado !== 'RECHAZADO';
     if (filterStatus === 'CONFIRMED') return isConfirmed;
+    if (filterStatus === 'ESPECIAL') return isSpecial;
     return true;
   });
 
@@ -281,6 +288,21 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
         >
           <Text style={[styles.chipText, filterStatus === 'CONFIRMED' && styles.chipTextActiveSuccess]}>
             ✅ Confirmadas
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.chip,
+            filterStatus === 'ESPECIAL' && { backgroundColor: '#742284', borderColor: '#742284' }
+          ]}
+          onPress={() => setFilterStatus('ESPECIAL')}
+        >
+          <Text style={[
+            styles.chipText,
+            filterStatus === 'ESPECIAL' && { color: '#FFF', fontWeight: '800' }
+          ]}>
+            ✨ Especiales
           </Text>
         </TouchableOpacity>
       </View>
