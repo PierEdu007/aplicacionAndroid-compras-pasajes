@@ -214,6 +214,39 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
     }
   };
 
+  const handleDeleteSpecialSale = (venta: Venta) => {
+    Alert.alert(
+      '🗑️ Eliminar Venta Especial',
+      `¿Estás seguro de que deseas ELIMINAR esta venta especial por equivocación?\n\n• Pasajero / Razón Social: ${venta.nombres} ${venta.apellidos}\n• Documento: ${venta.tipo_documento} ${venta.nro_documento}\n• Monto: S/ ${Number(venta.monto_pagado).toFixed(2)}\n• Comprobante: ${venta.nro_comprobante || 'Generado'}\n\nEsta acción eliminará el registro de la base de datos de manera permanente.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar Venta',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingId(venta.id);
+            try {
+              const { error } = await supabase
+                .from('ventas')
+                .delete()
+                .eq('id', venta.id);
+
+              if (error) throw error;
+
+              setVentas((prev) => prev.filter((v) => v.id !== venta.id));
+              Alert.alert('✅ Eliminado', 'La venta especial y su comprobante fueron eliminados.');
+            } catch (err: any) {
+              console.error('Error eliminando venta especial:', err);
+              Alert.alert('Error', err.message || 'No se pudo eliminar la venta especial.');
+            } finally {
+              setProcessingId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const filteredVentas = ventas.filter((v) => {
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -324,6 +357,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
               onReject={handleRejectPayment}
               onViewPdf={handleViewPdf}
               onResendEmail={handleResendEmail}
+              onDeleteSpecial={handleDeleteSpecialSale}
               isProcessing={processingId === item.id}
             />
           )}

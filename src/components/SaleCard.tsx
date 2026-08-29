@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Venta } from '../types/database';
-import { CheckCircle2, XCircle, FileText, Share2, Phone, MessageCircle, Mail, Clock } from 'lucide-react-native';
+import { CheckCircle2, XCircle, FileText, Share2, Phone, MessageCircle, Mail, Clock, Trash2 } from 'lucide-react-native';
 import { generateAndShareTicket } from '../services/ticketPdfService';
 
 interface SaleCardProps {
@@ -11,6 +11,7 @@ interface SaleCardProps {
   onReject: (venta: Venta) => void;
   onViewPdf: (venta: Venta) => void;
   onResendEmail: (venta: Venta) => void;
+  onDeleteSpecial?: (venta: Venta) => void;
   isProcessing?: boolean;
 }
 
@@ -20,11 +21,13 @@ export const SaleCard: React.FC<SaleCardProps> = ({
   onReject,
   onViewPdf,
   onResendEmail,
+  onDeleteSpecial,
   isProcessing,
 }) => {
   const isConfirmed = venta.comprobante_emitido || venta.estado === 'CONFIRMADO';
   const isRejected = venta.estado === 'RECHAZADO' || venta.culqi_charge_id?.startsWith('RECHAZADO_');
   const isPending = !isConfirmed && !isRejected;
+  const isSpecial = venta.numero_asiento === 0 || Boolean(venta.culqi_charge_id?.includes('ESPECIAL'));
 
   const handleCall = () => {
     if (venta.telefono) {
@@ -155,13 +158,16 @@ export const SaleCard: React.FC<SaleCardProps> = ({
           <Text style={[styles.commButtonText, { color: '#059669' }]}>WhatsApp</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.commButton}
-          onPress={() => generateAndShareTicket(venta)}
-        >
-          <Share2 size={14} color={THEME.colors.accentDark} />
-          <Text style={[styles.commButtonText, { color: THEME.colors.accentDark }]}>Boleto</Text>
-        </TouchableOpacity>
+        {/* Ocultar boleto de asiento en viajes especiales (solo SUNAT) */}
+        {!isSpecial && (
+          <TouchableOpacity
+            style={styles.commButton}
+            onPress={() => generateAndShareTicket(venta)}
+          >
+            <Share2 size={14} color={THEME.colors.accentDark} />
+            <Text style={[styles.commButtonText, { color: THEME.colors.accentDark }]}>Boleto</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Primary Actions */}
@@ -207,6 +213,18 @@ export const SaleCard: React.FC<SaleCardProps> = ({
               <Text style={[styles.actionBtnText, { color: THEME.colors.primary }]}>Reenviar</Text>
             </TouchableOpacity>
           </>
+        )}
+
+        {/* Botón Eliminar: SOLO EN VIAJES ESPECIALES */}
+        {isSpecial && onDeleteSpecial && (
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.deleteBtn]}
+            onPress={() => onDeleteSpecial(venta)}
+            disabled={isProcessing}
+          >
+            <Trash2 size={15} color="#DC2626" />
+            <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>Eliminar</Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -416,6 +434,11 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.primarySoft,
     borderWidth: 1,
     borderColor: '#E9D5FF',
+  },
+  deleteBtn: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   actionBtnTextWhite: {
     color: '#FFF',

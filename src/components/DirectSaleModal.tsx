@@ -390,6 +390,11 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         if (!tripId && allViajes.length > 0) {
           tripId = allViajes[0].id;
         }
+
+        if (!tripId) {
+          const { data: anyViaje } = await supabase.from('viajes').select('id').limit(1).maybeSingle();
+          if (anyViaje?.id) tripId = anyViaje.id;
+        }
       }
 
       const chargeId = isEspecial
