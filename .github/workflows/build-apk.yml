@@ -60,27 +60,26 @@ jobs:
       - name: 🚀 Publicar Release con Enlace de Descarga Directa
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.1
-          name: Tunky Chasky Admin v1.2.1 (Auto-confirmación de Ventas Especiales y Eliminación de Facturas)
+          tag_name: v1.2.2
+          name: Tunky Chasky Admin v1.2.2 (Corrección de Restricción Única en Ventas Especiales)
           body: |
-            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.1
+            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.2
 
             Aplicación oficial de gestión de ventas y control de pasajes para **Inversiones Tunki Chasky S.R.L.**:
 
             ### 📥 Descarga Directa del Instalador APK:
-            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.1/TunkyChaskyAdmin.apk)** (Última versión)
-            - **[TunkyChaskyAdmin-v1.2.1.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.1/TunkyChaskyAdmin-v1.2.1.apk)**
+            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.2/TunkyChaskyAdmin.apk)** (Última versión)
+            - **[TunkyChaskyAdmin-v1.2.2.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.2/TunkyChaskyAdmin-v1.2.2.apk)**
 
             ---
 
-            ### ✨ Novedades y Mejoras v1.2.1:
+            ### ✨ Novedades y Mejoras v1.2.2:
+            - **🔧 Corrección de Error de Restricción Única (idx_venta_unica)**: Se genera un identificador de asiento único para cada venta especial, permitiendo registrar múltiples ventas especiales sin conflictos de base de datos.
             - **⚡ Auto-confirmación de Ventas Especiales**: Las ventas y viajes especiales se confirman automáticamente y aparecen de inmediato en el panel de ventas.
             - **🗑️ Opción de Eliminar Facturas/Ventas Especiales**: Botón de eliminación con confirmación de seguridad para viajes especiales en caso de equivocación al emitir.
             - **🚐 Modo Viaje Especial sin Asientos**: Emisión rápida de viajes especiales con origen y destino en mayúsculas.
             - **🧾 Emisión Directa SUNAT (NubeFact)**: Facturas y boletas electrónicas oficiales con validación de RUC y DNI.
             - **🔍 Filtro Rápido de Viajes Especiales**: Pestaña dedicada en la pantalla de ventas para consultar viajes especiales al instante.
-            - **📅 Calendario Táctil y Selector de Horarios**: Selección visual rápida de fechas y horas.
-            - **📧 Envío Automático de Comprobantes**: Envío automático de boleta/factura en PDF al cliente.
 
             ---
             #### 📋 Instrucciones de Instalación:
@@ -90,7 +89,7 @@ jobs:
             4. Presiona **Instalar** y ¡listo!
           files: |
             build-output/TunkyChaskyAdmin.apk
-            build-output/TunkyChaskyAdmin-v1.2.1.apk
+            build-output/TunkyChaskyAdmin-v1.2.2.apk
           draft: false
           prerelease: false
           make_latest: true

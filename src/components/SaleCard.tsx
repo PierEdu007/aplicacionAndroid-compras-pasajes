@@ -27,7 +27,7 @@ export const SaleCard: React.FC<SaleCardProps> = ({
   const isConfirmed = venta.comprobante_emitido || venta.estado === 'CONFIRMADO';
   const isRejected = venta.estado === 'RECHAZADO' || venta.culqi_charge_id?.startsWith('RECHAZADO_');
   const isPending = !isConfirmed && !isRejected;
-  const isSpecial = venta.numero_asiento === 0 || Boolean(venta.culqi_charge_id?.includes('ESPECIAL'));
+  const isSpecial = venta.numero_asiento <= 0 || Boolean(venta.culqi_charge_id?.includes('ESPECIAL'));
 
   const handleCall = () => {
     if (venta.telefono) {
@@ -42,7 +42,7 @@ export const SaleCard: React.FC<SaleCardProps> = ({
       const cleanPhone = venta.telefono.replace(/\D/g, '');
       const fullPhone = cleanPhone.startsWith('51') ? cleanPhone : `51${cleanPhone}`;
       const msg = encodeURIComponent(
-        `Hola ${venta.nombres}, le saludamos de Inversiones Tunky Chasky sobre su pasaje a ${venta.viajes?.rutas?.destino || 'su destino'} (Asiento #${venta.numero_asiento}).`
+        `Hola ${venta.nombres}, le saludamos de Inversiones Tunky Chasky sobre su pasaje a ${venta.viajes?.rutas?.destino || 'su destino'} (${isSpecial ? 'Viaje Especial' : `Asiento #${venta.numero_asiento}`}).`
       );
       Linking.openURL(`https://wa.me/${fullPhone}?text=${msg}`);
     } else {
@@ -93,21 +93,19 @@ export const SaleCard: React.FC<SaleCardProps> = ({
           </Text>
           <View style={[
             styles.seatBadge,
-            (venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL')) && {
+            isSpecial && {
               backgroundColor: '#FAF5FF',
               borderColor: '#E9D5FF',
             }
           ]}>
             <Text style={[
               styles.seatBadgeText,
-              (venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL')) && {
+              isSpecial && {
                 color: '#742284',
                 fontWeight: '800',
               }
             ]}>
-              {venta.numero_asiento === 0 || venta.culqi_charge_id?.includes('ESPECIAL')
-                ? '✨ Especial'
-                : `Asiento #${venta.numero_asiento}`}
+              {isSpecial ? '✨ Especial' : `Asiento #${venta.numero_asiento}`}
             </Text>
           </View>
         </View>

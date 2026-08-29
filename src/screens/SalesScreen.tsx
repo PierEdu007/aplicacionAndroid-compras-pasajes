@@ -260,7 +260,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
     if (!matchesSearch) return false;
 
     const isConfirmed = v.comprobante_emitido || v.estado === 'CONFIRMADO';
-    const isSpecial = v.numero_asiento === 0 || v.culqi_charge_id?.includes('ESPECIAL');
+    const isSpecial = v.numero_asiento <= 0 || Boolean(v.culqi_charge_id?.includes('ESPECIAL'));
 
     if (filterStatus === 'PENDING') return !isConfirmed && v.estado !== 'RECHAZADO';
     if (filterStatus === 'CONFIRMED') return isConfirmed;
