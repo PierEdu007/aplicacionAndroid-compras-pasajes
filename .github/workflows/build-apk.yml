@@ -3,6 +3,7 @@ name: Compilar APK Android Tunky Chasky
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 permissions:
@@ -47,32 +48,50 @@ jobs:
         run: |
           mkdir -p build-output
           cp android/app/build/outputs/apk/release/app-release.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/release/*.apk build-output/TunkyChaskyAdmin.apk
+          cp build-output/TunkyChaskyAdmin.apk build-output/TunkyChaskyAdmin-v1.2.0.apk
 
       - name: 📤 Subir APK como Artefacto de Descarga
         uses: actions/upload-artifact@v4
         with:
           name: TunkyChaskyAdmin-APK
-          path: build-output/TunkyChaskyAdmin.apk
+          path: build-output/*.apk
           retention-days: 30
 
       - name: 🚀 Publicar Release con Enlace de Descarga Directa
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v1.1.0
-          name: Tunky Chasky Admin v1.1.0 (Calendario Táctil, Selector de Horas y Hora de Compra)
+          tag_name: v1.2.0
+          name: Tunky Chasky Admin v1.2.0 (Gestión de Ventas, Viajes Especiales y Facturación SUNAT)
           body: |
-            ## 📱 Tunky Chasky Admin v1.1.0
-            
+            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.0
+
+            Aplicación oficial de gestión de ventas y control de pasajes para **Inversiones Tunki Chasky S.R.L.**:
+
             ### 📥 Descarga Directa del Instalador APK:
-            Descarga el archivo `TunkyChaskyAdmin.apk` adjunto abajo en tu teléfono celular Android e instálalo para actualizar la aplicación.
-            
-            ### ✨ Novedades y Mejoras v1.1.0:
-            - **📅 Nuevo Calendario Táctil Mensual (`CalendarModal`)**: Selección visual de fechas en 1 solo toque, sin tener que escribir fechas manualmente con guiones.
-            - **⏰ Nuevo Selector Visual de Horas (`TimePickerModal`)**: Horarios frecuentes y selector de horas/minutos sin escribir dos puntos ni equivocarse en el formato.
-            - **⌨️ Corrección de Teclado Móvil (`KeyboardAvoidingView`)**: Los campos de texto (DNI, RUC, Nombres, Teléfono) ya no quedan cubiertos por el teclado del celular al rellenar información.
-            - **🕐 Registro y Muestra de Hora Exacta de Compra**: Cada venta muestra la fecha y hora exacta en la que se realizó la reserva (`🕐 Comprado el: DD/MM/YYYY, hh:mm A`).
-            - **Envío Automático de Correo con Boleta/Factura PDF y Boleto de Viaje**.
-          files: build-output/TunkyChaskyAdmin.apk
+            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.0/TunkyChaskyAdmin.apk)** (Última versión)
+            - **[TunkyChaskyAdmin-v1.2.0.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.0/TunkyChaskyAdmin-v1.2.0.apk)**
+
+            ---
+
+            ### ✨ Novedades y Mejoras v1.2.0:
+            - **🚐 Modo Viaje Especial sin Asientos**: Emisión rápida de viajes especiales con origen y destino personalizados en mayúsculas.
+            - **🧾 Emisión Directa SUNAT (NubeFact)**: Facturas y boletas electrónicas oficiales con validación de RUC y DNI del pasajero.
+            - **🔍 Filtro Rápido de Viajes Especiales**: Pestaña dedicada en la pantalla de ventas para consultar viajes especiales al instante.
+            - **📍 Rutas Kiteni Actualizadas**: Autoseed y selección de nuevas rutas para Kiteni, Quillabamba, Cusco y Calca.
+            - **📅 Calendario Táctil y Selector de Horarios**: Selección visual rápida de fechas y horas en 1 toque.
+            - **📧 Envío Automático de Comprobante por Correo**: Envío de boleta/factura en PDF y ticket de viaje al cliente.
+
+            ---
+            #### 📋 Instrucciones de Instalación:
+            1. Descarga el archivo **`TunkyChaskyAdmin.apk`** en tu celular Android.
+            2. Abre el archivo descargado.
+            3. Si solicita permisos, selecciona **"Permitir instalar aplicaciones de esta fuente"**.
+            4. Presiona **Instalar** y ¡listo!
+          files: |
+            build-output/TunkyChaskyAdmin.apk
+            build-output/TunkyChaskyAdmin-v1.2.0.apk
+          draft: false
+          prerelease: false
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tunky Chasky Admin",
     "slug": "tunky-chasky-admin",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "pe.com.turismotunkychasky.admin",
-      "versionCode": 8,
+      "versionCode": 9,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#742284"
