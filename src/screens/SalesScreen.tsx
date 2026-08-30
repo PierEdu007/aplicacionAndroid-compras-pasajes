@@ -17,7 +17,7 @@ import { Header } from '../components/Header';
 import { SaleCard } from '../components/SaleCard';
 import { supabase } from '../lib/supabase';
 import { Venta } from '../types/database';
-import { emitirComprobanteSunat } from '../services/sunatService';
+import { emitirComprobanteSunat, anularComprobanteSunat } from '../services/sunatService';
 import { sendConfirmationEmail } from '../services/emailService';
 import { Search, Filter, Plus, Calendar, X } from 'lucide-react-native';
 import { CalendarModal } from '../components/CalendarModal';
@@ -220,17 +220,69 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
   };
 
   const handleDeleteSpecialSale = (venta: Venta) => {
+    const todayPeru = getPeruTodayString();
+    const saleDateStr = (venta.created_at || '').substring(0, 10);
+    const isToday = saleDateStr === todayPeru;
+
+    // Extraer serie y correlativo si tiene comprobante emitido
+    let serie = '';
+    let numero = 0;
+    if (venta.nro_comprobante && venta.nro_comprobante.includes('-')) {
+      const parts = venta.nro_comprobante.split('-');
+      serie = parts[0]?.trim() || '';
+      numero = parseInt(parts[1]?.trim() || '0', 10);
+    }
+
+    const hasSunatInvoice = Boolean(venta.comprobante_emitido && serie && numero);
+
+    let message = `¿Estás seguro de que deseas ELIMINAR esta venta especial por equivocación?\n\n` +
+      `• Pasajero / Razón Social: ${venta.nombres} ${venta.apellidos}\n` +
+      `• Documento: ${venta.tipo_documento} ${venta.nro_documento}\n` +
+      `• Monto: S/ ${Number(venta.monto_pagado).toFixed(2)}\n` +
+      `• Comprobante: ${venta.nro_comprobante || 'Sin emitir'}\n\n`;
+
+    if (hasSunatInvoice) {
+      if (isToday) {
+        message += `⚡ ANULACIÓN DIRECTA SUNAT (Mismo día):\n` +
+          `Al confirmar, se enviará la Comunicación de Baja/Anulación a SUNAT (NubeFact) para anular la Factura/Boleta ${venta.nro_comprobante} y se eliminará el registro.`;
+      } else {
+        message += `⚠️ FACTURA DE FECHA ANTERIOR (${saleDateStr}):\n` +
+          `La anulación directa el mismo día no aplica. Se eliminará del sistema local, pero deberás regularizar la anulación ante SUNAT con Nota de Crédito.`;
+      }
+    } else {
+      message += `Esta acción eliminará el registro de la base de datos de manera permanente.`;
+    }
+
     Alert.alert(
-      '🗑️ Eliminar Venta Especial',
-      `¿Estás seguro de que deseas ELIMINAR esta venta especial por equivocación?\n\n• Pasajero / Razón Social: ${venta.nombres} ${venta.apellidos}\n• Documento: ${venta.tipo_documento} ${venta.nro_documento}\n• Monto: S/ ${Number(venta.monto_pagado).toFixed(2)}\n• Comprobante: ${venta.nro_comprobante || 'Generado'}\n\nEsta acción eliminará el registro de la base de datos de manera permanente.`,
+      hasSunatInvoice && isToday ? '🗑️ Anular en SUNAT y Eliminar' : '🗑️ Eliminar Venta Especial',
+      message,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Eliminar Venta',
+          text: hasSunatInvoice && isToday ? 'Anular en SUNAT y Eliminar' : 'Eliminar Venta',
           style: 'destructive',
           onPress: async () => {
             setProcessingId(venta.id);
             try {
+              let sunatNote = '';
+
+              // 1. Si tiene comprobante emitido hoy, anular ante SUNAT mediante NubeFact
+              if (hasSunatInvoice && isToday) {
+                const anulaRes = await anularComprobanteSunat(
+                  venta.tipo_documento,
+                  serie,
+                  numero,
+                  'Anulación por error en emisión de viaje especial'
+                );
+
+                if (anulaRes.success) {
+                  sunatNote = `\n\nSUNAT: ${anulaRes.sunatMessage || 'Comprobante dado de baja exitosamente en SUNAT.'}`;
+                } else {
+                  sunatNote = `\n\nAviso SUNAT: ${anulaRes.error || 'No se pudo comunicar la baja a NubeFact'}`;
+                }
+              }
+
+              // 2. Eliminar de Supabase
               const { error } = await supabase
                 .from('ventas')
                 .delete()
@@ -239,7 +291,10 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
               if (error) throw error;
 
               setVentas((prev) => prev.filter((v) => v.id !== venta.id));
-              Alert.alert('✅ Eliminado', 'La venta especial y su comprobante fueron eliminados.');
+              Alert.alert(
+                '✅ Venta Eliminada',
+                `La venta especial fue eliminada del sistema.${sunatNote}`
+              );
             } catch (err: any) {
               console.error('Error eliminando venta especial:', err);
               Alert.alert('Error', err.message || 'No se pudo eliminar la venta especial.');

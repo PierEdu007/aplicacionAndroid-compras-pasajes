@@ -60,25 +60,25 @@ jobs:
       - name: 🚀 Publicar Release con Enlace de Descarga Directa
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.3
-          name: Tunky Chasky Admin v1.2.3 (Campos Opcionales en Ventas Especiales y Respaldo NubeFact)
+          tag_name: v1.2.4
+          name: Tunky Chasky Admin v1.2.4 (Anulación SUNAT en Tiempo Real y Optimización de Ventas Especiales)
           body: |
-            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.3
+            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.4
 
             Aplicación oficial de gestión de ventas y control de pasajes para **Inversiones Tunki Chasky S.R.L.**:
 
             ### 📥 Descarga Directa del Instalador APK:
-            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.3/TunkyChaskyAdmin.apk)** (Última versión)
-            - **[TunkyChaskyAdmin-v1.2.3.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.3/TunkyChaskyAdmin-v1.2.3.apk)**
+            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.4/TunkyChaskyAdmin.apk)** (Última versión)
+            - **[TunkyChaskyAdmin-v1.2.4.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.4/TunkyChaskyAdmin-v1.2.4.apk)**
 
             ---
 
-            ### ✨ Novedades y Mejoras v1.2.3:
-            - **📞 Correo y Celular Opcionales en Ventas Especiales**: En las ventas de rutas especiales ya no es obligatorio ingresar celular ni correo electrónico.
-            - **🧾 Respaldo Automático NubeFact/SUNAT**: Los comprobantes oficiales emitidos quedan almacenados de forma permanente en la base de datos (con enlace al PDF oficial de SUNAT).
-            - **🔧 Corrección de Restricción Única (idx_venta_unica)**: Asignación de identificadores de venta independientes para permitir infinitos viajes especiales sin colisiones.
-            - **⚡ Auto-confirmación de Ventas Especiales**: Confirmación inmediata y visualización en tiempo real.
-            - **🗑️ Opción de Eliminar Facturas/Ventas Especiales**: Botón de eliminación con confirmación de seguridad exclusivamente para viajes especiales.
+            ### ✨ Novedades y Mejoras v1.2.4:
+            - **⚡ Anulación Oficial Directa en SUNAT (Mismo Día)**: Al eliminar una venta especial emitida el mismo día, el sistema envía automáticamente la Comunicación de Baja/Anulación a SUNAT (NubeFact), dando de baja la Factura o Boleta electrónicamente.
+            - **⚠️ Advertencia para Facturas de Fechas Anteriores**: El sistema informa que para comprobantes de días anteriores la anulación debe realizarse formalmente mediante Nota de Crédito.
+            - **📞 Correo y Celular Opcionales en Ventas Especiales**: Facilidad de venta rápida sin requerir teléfono ni email del cliente de manera forzosa.
+            - **🧾 Respaldo Automático NubeFact/SUNAT**: Los comprobantes oficiales emitidos quedan almacenados permanentemente en la base de datos.
+            - **🔧 Corrección de Restricción Única (idx_venta_unica)**: Identificadores de transacción únicos para múltiples viajes especiales sin conflictos.
 
             ---
             #### 📋 Instrucciones de Instalación:
@@ -88,7 +88,7 @@ jobs:
             4. Presiona **Instalar** y ¡listo!
           files: |
             build-output/TunkyChaskyAdmin.apk
-            build-output/TunkyChaskyAdmin-v1.2.3.apk
+            build-output/TunkyChaskyAdmin-v1.2.4.apk
           draft: false
           prerelease: false
           make_latest: true

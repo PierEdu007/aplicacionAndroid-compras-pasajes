@@ -230,7 +230,7 @@ export async function emitirComprobanteSunat(
  * Anular Comprobante Electrónico (Comunicación de Baja ante SUNAT)
  */
 export async function anularComprobanteSunat(
-  tipoComprobante: 'BOLETA' | 'FACTURA' | 'RUC' | 'DNI',
+  tipoComprobante: string,
   serie: string,
   numero: number,
   motivo?: string,
