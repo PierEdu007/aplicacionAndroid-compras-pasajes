@@ -326,7 +326,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       return;
     }
 
-    if (!telefono.trim()) {
+    if (!isEspecial && !telefono.trim()) {
       Alert.alert('Error', 'Ingresa el número de celular del cliente para enviar su comprobante.');
       return;
     }
@@ -520,8 +520,12 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                     `*INVERSIONES TUNKY CHASKY S.R.L.*\n\nEstimado(a) *${nombres.trim() || razonSocial.trim()}*,\nLe adjuntamos su *${compTipo} ${compNro}* por el servicio de transporte *${cleanO} ➔ ${cleanD}*.\n\n📄 *Descargar Comprobante PDF (SUNAT):*\n${sunatRes.pdfUrl}\n\n¡Gracias por su preferencia!`
                   );
                   const cleanPhone = telefono.trim().replace(/\D/g, '');
-                  const phoneWithCode = cleanPhone.startsWith('51') ? cleanPhone : `51${cleanPhone}`;
-                  Linking.openURL(`https://wa.me/${phoneWithCode}?text=${textMsg}`);
+                  if (cleanPhone) {
+                    const phoneWithCode = cleanPhone.startsWith('51') ? cleanPhone : `51${cleanPhone}`;
+                    Linking.openURL(`https://wa.me/${phoneWithCode}?text=${textMsg}`);
+                  } else {
+                    Linking.openURL(`https://wa.me/?text=${textMsg}`);
+                  }
                 }
                 onSaleComplete();
                 onClose();
@@ -1008,7 +1012,9 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
             </View>
 
             {/* Celular / WhatsApp */}
-            <Text style={styles.fieldLabel}>Número de Celular / WhatsApp (Obligatorio):</Text>
+            <Text style={styles.fieldLabel}>
+              {saleMode === 'ESPECIAL' ? 'Número de Celular / WhatsApp (Opcional):' : 'Número de Celular / WhatsApp (Obligatorio):'}
+            </Text>
             <View style={styles.inputWithIcon}>
               <Phone size={16} color={THEME.colors.primary} />
               <TextInput
