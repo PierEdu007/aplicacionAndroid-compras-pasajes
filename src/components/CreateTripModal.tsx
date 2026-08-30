@@ -15,7 +15,7 @@ import {
 import { THEME } from '../constants/theme';
 import { Ruta, Vehiculo } from '../types/database';
 import { supabase } from '../lib/supabase';
-import { X, Plus, Calendar, Clock, DollarSign, ChevronRight } from 'lucide-react-native';
+import { X, Plus, Calendar, Clock, DollarSign, ChevronRight, MapPin, Sparkles } from 'lucide-react-native';
 import { CalendarModal } from './CalendarModal';
 import { TimePickerModal } from './TimePickerModal';
 import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay } from '../utils/dateHelper';
@@ -41,6 +41,13 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
   const [horaViaje, setHoraViaje] = useState('07:00');
   const [precioBase, setPrecioBase] = useState('50.00');
 
+  // Nueva Ruta Personalizada
+  const [showNewRouteForm, setShowNewRouteForm] = useState(false);
+  const [newOrigen, setNewOrigen] = useState('');
+  const [newDestino, setNewDestino] = useState('');
+  const [newDuracion, setNewDuracion] = useState('05:00:00');
+  const [savingRoute, setSavingRoute] = useState(false);
+
   // Modales de Selección Visual
   const [showCalendar, setShowCalendar] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -48,6 +55,7 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
   useEffect(() => {
     if (visible) {
       loadFormData();
+      setShowNewRouteForm(false);
     }
   }, [visible]);
 
@@ -80,14 +88,74 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
 
       if (listRutas.length > 0) {
         setRutas(listRutas);
-        setSelectedRutaId(listRutas[0].id);
+        if (!selectedRutaId) setSelectedRutaId(listRutas[0].id);
       }
       if (vData && vData.length > 0) {
         setVehiculos(vData);
-        setSelectedVehiculoId('BOTH');
+        if (!selectedVehiculoId) setSelectedVehiculoId('BOTH');
       }
     } catch (e) {
       console.error('Error cargando rutas/vehículos:', e);
+    }
+  };
+
+  const handleSaveNewRoute = async () => {
+    const orig = newOrigen.trim().toUpperCase();
+    const dest = newDestino.trim().toUpperCase();
+
+    if (!orig || !dest) {
+      Alert.alert('Ruta incompleta', 'Por favor ingresa tanto la ciudad de origen como la de destino.');
+      return;
+    }
+
+    if (orig === dest) {
+      Alert.alert('Error', 'El origen y destino no pueden ser iguales.');
+      return;
+    }
+
+    setSavingRoute(true);
+    try {
+      // Verificar si ya existe
+      const existing = rutas.find(
+        (r) => r.origen.toUpperCase() === orig && r.destino.toUpperCase() === dest
+      );
+
+      if (existing) {
+        setSelectedRutaId(existing.id);
+        setShowNewRouteForm(false);
+        setNewOrigen('');
+        setNewDestino('');
+        Alert.alert('Ruta seleccionada', `La ruta ${orig} ➔ ${dest} ya existía y ha sido seleccionada.`);
+        return;
+      }
+
+      const { data: insertedRoute, error } = await supabase
+        .from('rutas')
+        .insert({
+          origen: orig,
+          destino: dest,
+          duracion_estimada: newDuracion.trim() || '05:00:00',
+          activa: true,
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      if (insertedRoute) {
+        const updated = [...rutas, insertedRoute];
+        setRutas(updated);
+        setSelectedRutaId(insertedRoute.id);
+        setShowNewRouteForm(false);
+        setNewOrigen('');
+        setNewDestino('');
+        Alert.alert('✅ Ruta Creada', `¡La ruta ${orig} ➔ ${dest} fue registrada y seleccionada exitosamente!`);
+      }
+    } catch (err: any) {
+      console.error('Error creando nueva ruta:', err);
+      Alert.alert('Error', err.message || 'No se pudo registrar la nueva ruta.');
+    } finally {
+      setSavingRoute(false);
     }
   };
 
@@ -129,7 +197,7 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
         if (error) throw error;
       }
 
-      Alert.alert('Éxito', '¡Viaje(s) programado(s) exitosamente!');
+      Alert.alert('Éxito', '¡Salida programada exitosamente!');
       onTripCreated();
       onClose();
     } catch (err: any) {
@@ -153,7 +221,7 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Programar Nueva Salida</Text>
-              <Text style={styles.subtitle}>Crea un viaje disponible para reserva</Text>
+              <Text style={styles.subtitle}>Crea una ruta y horario disponible para reserva</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
               <X size={20} color={THEME.colors.textPrimary} />
@@ -166,7 +234,79 @@ export const CreateTripModal: React.FC<CreateTripModalProps> = ({
             contentContainerStyle={{ paddingBottom: 60 }}
           >
             {/* Ruta Selector */}
-            <Text style={styles.label}>Ruta de Viaje:</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.label}>Ruta de Viaje:</Text>
+              <TouchableOpacity
+                style={styles.addRouteToggleBtn}
+                onPress={() => setShowNewRouteForm(!showNewRouteForm)}
+              >
+                <Plus size={14} color={THEME.colors.primary} />
+                <Text style={styles.addRouteToggleText}>
+                  {showNewRouteForm ? 'Cerrar Nueva Ruta' : '+ Nueva Ruta'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Inline New Route Form for Employees */}
+            {showNewRouteForm && (
+              <View style={styles.newRouteBox}>
+                <View style={styles.newRouteHeader}>
+                  <Sparkles size={16} color={THEME.colors.primary} />
+                  <Text style={styles.newRouteTitle}>Registrar Nueva Ruta</Text>
+                </View>
+
+                <View style={styles.newRouteInputGroup}>
+                  <Text style={styles.inputSubLabel}>Ciudad de Origen:</Text>
+                  <TextInput
+                    style={styles.newRouteInput}
+                    value={newOrigen}
+                    onChangeText={(t) => setNewOrigen(t.toUpperCase())}
+                    placeholder="Ej. CUSCO, QUILLABAMBA, KITENI..."
+                    placeholderTextColor={THEME.colors.textMuted}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.newRouteInputGroup}>
+                  <Text style={styles.inputSubLabel}>Ciudad de Destino:</Text>
+                  <TextInput
+                    style={styles.newRouteInput}
+                    value={newDestino}
+                    onChangeText={(t) => setNewDestino(t.toUpperCase())}
+                    placeholder="Ej. QUILLABAMBA, ECHARATI, CALCA..."
+                    placeholderTextColor={THEME.colors.textMuted}
+                    autoCapitalize="characters"
+                  />
+                </View>
+
+                <View style={styles.newRouteInputGroup}>
+                  <Text style={styles.inputSubLabel}>Duración Estimada (HH:MM:SS):</Text>
+                  <TextInput
+                    style={styles.newRouteInput}
+                    value={newDuracion}
+                    onChangeText={setNewDuracion}
+                    placeholder="05:00:00"
+                    placeholderTextColor={THEME.colors.textMuted}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.saveRouteBtn}
+                  onPress={handleSaveNewRoute}
+                  disabled={savingRoute}
+                >
+                  {savingRoute ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <>
+                      <MapPin size={16} color="#FFF" />
+                      <Text style={styles.saveRouteBtnText}>Guardar y Usar Ruta</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View style={styles.chipRow}>
               {rutas.map((r) => (
                 <TouchableOpacity
@@ -370,6 +510,83 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     padding: 6,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  addRouteToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: THEME.colors.primary,
+  },
+  addRouteToggleText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: THEME.colors.primary,
+  },
+  newRouteBox: {
+    backgroundColor: THEME.colors.surfaceSubtle,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: THEME.colors.primary,
+    gap: 10,
+  },
+  newRouteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  newRouteTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: THEME.colors.primary,
+  },
+  newRouteInputGroup: {
+    gap: 4,
+  },
+  inputSubLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: THEME.colors.textSecondary,
+  },
+  newRouteInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+    fontSize: 13,
+    fontWeight: '700',
+    color: THEME.colors.textPrimary,
+  },
+  saveRouteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: THEME.colors.primary,
+    borderRadius: 8,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  saveRouteBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
   label: {
     fontSize: 13,

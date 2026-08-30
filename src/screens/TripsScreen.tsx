@@ -4,28 +4,36 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  TextInput,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
   Alert,
+  ScrollView,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Header } from '../components/Header';
 import { TripCard } from '../components/TripCard';
 import { SeatMapModal } from '../components/SeatMapModal';
 import { CreateTripModal } from '../components/CreateTripModal';
+import { CalendarModal } from '../components/CalendarModal';
 import { supabase } from '../lib/supabase';
 import { Viaje } from '../types/database';
 import { useAuth } from '../context/AuthContext';
 import { getPeruTodayString, getPeruTomorrowString, formatPeruDateDisplay } from '../utils/dateHelper';
-import { Plus, Calendar, Filter } from 'lucide-react-native';
+import { Plus, Calendar, Search, X, MapPin } from 'lucide-react-native';
 
 export const TripsScreen: React.FC = () => {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isEmpleado, isVendedor } = useAuth();
+  const canManageTrips = isAdmin || isEmpleado || isVendedor;
+
   const [viajes, setViajes] = useState<Viaje[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filterDate, setFilterDate] = useState<'ALL' | 'TODAY' | 'TOMORROW'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterDate, setFilterDate] = useState<'ALL' | 'TODAY' | 'TOMORROW' | 'CUSTOM'>('ALL');
+  const [selectedCustomDate, setSelectedCustomDate] = useState<string>('');
+  const [showFilterCalendar, setShowFilterCalendar] = useState(false);
   const [selectedRouteFilter, setSelectedRouteFilter] = useState<string>('ALL');
 
   // Modals
@@ -33,10 +41,10 @@ export const TripsScreen: React.FC = () => {
   const [isSeatModalOpen, setIsSeatModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  const loadTrips = async () => {
+  const loadTrips = async (customDateToFetch?: string) => {
     try {
       const today = getPeruTodayString();
-      const { data, error } = await supabase
+      let query = supabase
         .from('viajes')
         .select(`
           id,
@@ -50,9 +58,17 @@ export const TripsScreen: React.FC = () => {
           rutas (origen, destino),
           vehiculos (nombre_display, total_asientos_pasajero, tipo)
         `)
-        .gte('fecha_viaje', today)
         .order('fecha_viaje', { ascending: true })
         .order('hora_viaje', { ascending: true });
+
+      // Si se pide una fecha específica antes de hoy, no limitar con gte
+      if (customDateToFetch && customDateToFetch < today) {
+        query = query.gte('fecha_viaje', customDateToFetch);
+      } else {
+        query = query.gte('fecha_viaje', today);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setViajes((data as any) || []);
@@ -71,7 +87,7 @@ export const TripsScreen: React.FC = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadTrips();
+    loadTrips(selectedCustomDate);
   };
 
   const handleOpenSeatMap = (viaje: Viaje) => {
@@ -104,7 +120,7 @@ export const TripsScreen: React.FC = () => {
                 Alert.alert('Éxito', 'Salida eliminada con éxito.');
               }
 
-              loadTrips();
+              loadTrips(selectedCustomDate);
             } catch (err: any) {
               Alert.alert('Error', err.message || 'No se pudo eliminar el viaje.');
             }
@@ -122,12 +138,25 @@ export const TripsScreen: React.FC = () => {
   );
 
   const filteredTrips = viajes.filter((v) => {
+    // 1. Date Filter
     if (filterDate === 'TODAY' && v.fecha_viaje !== todayStr) return false;
     if (filterDate === 'TOMORROW' && v.fecha_viaje !== tomorrowStr) return false;
+    if (filterDate === 'CUSTOM' && selectedCustomDate && v.fecha_viaje !== selectedCustomDate) return false;
 
+    // 2. Route Filter
     if (selectedRouteFilter !== 'ALL') {
       const rStr = `${v.rutas?.origen || 'CUSCO'} ➔ ${v.rutas?.destino || 'QUILLABAMBA'}`;
       if (rStr !== selectedRouteFilter) return false;
+    }
+
+    // 3. Search Query (Route, Time, Vehicle)
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchRoute = `${v.rutas?.origen || ''} ${v.rutas?.destino || ''}`.toLowerCase().includes(q);
+      const matchVehicle = v.vehiculos?.nombre_display?.toLowerCase().includes(q);
+      const matchHour = v.hora_viaje?.includes(q);
+      const matchDate = v.fecha_viaje?.includes(q);
+      if (!matchRoute && !matchVehicle && !matchHour && !matchDate) return false;
     }
 
     return true;
@@ -142,9 +171,42 @@ export const TripsScreen: React.FC = () => {
         isRefreshing={refreshing}
       />
 
-      {/* Action and Filter Bar */}
-      <View style={styles.topBar}>
-        <View style={styles.filterChipsRow}>
+      {/* Action and Search Bar */}
+      <View style={styles.searchBarContainer}>
+        <View style={styles.searchBox}>
+          <Search size={16} color={THEME.colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Buscar por ruta, hora, auto..."
+            placeholderTextColor={THEME.colors.textMuted}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <X size={16} color={THEME.colors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {canManageTrips && (
+          <TouchableOpacity
+            style={styles.createBtn}
+            onPress={() => setIsCreateModalOpen(true)}
+          >
+            <Plus size={16} color="#FFF" />
+            <Text style={styles.createBtnText}>Nueva Salida</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Date Filter Chips with Calendar Trigger */}
+      <View style={styles.filterScrollWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipsRow}
+        >
           <TouchableOpacity
             style={[styles.filterChip, filterDate === 'ALL' && styles.filterChipActive]}
             onPress={() => setFilterDate('ALL')}
@@ -171,42 +233,73 @@ export const TripsScreen: React.FC = () => {
               Mañana ({formatPeruDateDisplay(tomorrowStr).substring(0, 5)})
             </Text>
           </TouchableOpacity>
-        </View>
 
-        {isAdmin && (
+          {/* Calendar Picker Filter Chip */}
           <TouchableOpacity
-            style={styles.createBtn}
-            onPress={() => setIsCreateModalOpen(true)}
+            style={[
+              styles.filterChip,
+              styles.calendarFilterChip,
+              filterDate === 'CUSTOM' && styles.filterChipActive,
+            ]}
+            onPress={() => setShowFilterCalendar(true)}
           >
-            <Plus size={16} color="#FFF" />
-            <Text style={styles.createBtnText}>Nueva Salida</Text>
+            <Calendar size={13} color={filterDate === 'CUSTOM' ? '#FFF' : THEME.colors.primary} />
+            <Text
+              style={[
+                styles.filterChipText,
+                filterDate === 'CUSTOM' ? styles.textWhite : { color: THEME.colors.primary },
+              ]}
+            >
+              {filterDate === 'CUSTOM' && selectedCustomDate
+                ? `📅 ${formatPeruDateDisplay(selectedCustomDate)}`
+                : '📅 Elegir Fecha'}
+            </Text>
+            {filterDate === 'CUSTOM' && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setFilterDate('ALL');
+                  setSelectedCustomDate('');
+                  loadTrips();
+                }}
+                style={styles.clearDateBtn}
+              >
+                <X size={12} color="#FFF" />
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
-        )}
+        </ScrollView>
       </View>
 
       {/* Routes Horizontal Filter */}
       {uniqueRoutes.length > 1 && (
-        <View style={styles.routesRow}>
-          <TouchableOpacity
-            style={[styles.routePill, selectedRouteFilter === 'ALL' && styles.routePillActive]}
-            onPress={() => setSelectedRouteFilter('ALL')}
+        <View style={styles.routesScrollWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.routesRow}
           >
-            <Text style={[styles.routePillText, selectedRouteFilter === 'ALL' && styles.textWhite]}>
-              Todas las rutas
-            </Text>
-          </TouchableOpacity>
-
-          {uniqueRoutes.map((r) => (
             <TouchableOpacity
-              key={r}
-              style={[styles.routePill, selectedRouteFilter === r && styles.routePillActive]}
-              onPress={() => setSelectedRouteFilter(r)}
+              style={[styles.routePill, selectedRouteFilter === 'ALL' && styles.routePillActive]}
+              onPress={() => setSelectedRouteFilter('ALL')}
             >
-              <Text style={[styles.routePillText, selectedRouteFilter === r && styles.textWhite]}>
-                {r}
+              <Text style={[styles.routePillText, selectedRouteFilter === 'ALL' && styles.textWhite]}>
+                Todas las rutas
               </Text>
             </TouchableOpacity>
-          ))}
+
+            {uniqueRoutes.map((r) => (
+              <TouchableOpacity
+                key={r}
+                style={[styles.routePill, selectedRouteFilter === r && styles.routePillActive]}
+                onPress={() => setSelectedRouteFilter(r)}
+              >
+                <Text style={[styles.routePillText, selectedRouteFilter === r && styles.textWhite]}>
+                  {r}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -225,14 +318,26 @@ export const TripsScreen: React.FC = () => {
               viaje={item}
               onViewSeats={handleOpenSeatMap}
               onDelete={handleDeleteTrip}
-              isAdmin={isAdmin}
+              isAdmin={canManageTrips}
             />
           )}
           contentContainerStyle={styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No hay salidas programadas para esta fecha o filtro.</Text>
+              <Text style={styles.emptyTitle}>No hay salidas encontradas</Text>
+              <Text style={styles.emptyText}>
+                No se encontraron salidas programadas para la fecha o filtros seleccionados.
+              </Text>
+              {canManageTrips && (
+                <TouchableOpacity
+                  style={styles.emptyCreateBtn}
+                  onPress={() => setIsCreateModalOpen(true)}
+                >
+                  <Plus size={14} color="#FFF" />
+                  <Text style={styles.emptyCreateBtnText}>Programar Nueva Salida</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
@@ -251,7 +356,20 @@ export const TripsScreen: React.FC = () => {
       <CreateTripModal
         visible={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onTripCreated={loadTrips}
+        onTripCreated={() => loadTrips(selectedCustomDate)}
+      />
+
+      {/* Date Filter Calendar Modal */}
+      <CalendarModal
+        visible={showFilterCalendar}
+        selectedDate={selectedCustomDate || todayStr}
+        minDate=""
+        onSelectDate={(newDate) => {
+          setSelectedCustomDate(newDate);
+          setFilterDate('CUSTOM');
+          loadTrips(newDate);
+        }}
+        onClose={() => setShowFilterCalendar(false)}
       />
     </View>
   );
@@ -262,21 +380,67 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: THEME.colors.background,
   },
-  topBar: {
+  searchBarContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
+    backgroundColor: THEME.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.borderLight,
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 40,
+    borderWidth: 1,
+    borderColor: THEME.colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: THEME.colors.textPrimary,
+    paddingVertical: 0,
+  },
+  createBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: THEME.colors.primary,
+    paddingHorizontal: 12,
+    height: 40,
+    borderRadius: 10,
+    ...THEME.shadows.sm,
+  },
+  createBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  filterScrollWrapper: {
+    backgroundColor: THEME.colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: THEME.colors.borderLight,
   },
   filterChipsRow: {
     flexDirection: 'row',
     gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   filterChip: {
-    backgroundColor: THEME.colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: THEME.colors.surfaceSubtle,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: THEME.colors.border,
@@ -285,20 +449,32 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.primary,
     borderColor: THEME.colors.primary,
   },
+  calendarFilterChip: {
+    borderColor: THEME.colors.primary,
+    backgroundColor: THEME.colors.surfaceSubtle,
+  },
   filterChipText: {
     fontSize: 11,
     fontWeight: '700',
     color: THEME.colors.textSecondary,
   },
+  clearDateBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 10,
+    padding: 2,
+    marginLeft: 2,
+  },
+  routesScrollWrapper: {
+    backgroundColor: THEME.colors.surface,
+    paddingBottom: 6,
+  },
   routesRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingBottom: 8,
     gap: 6,
-    flexWrap: 'wrap',
   },
   routePill: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: THEME.colors.surfaceSubtle,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -317,21 +493,6 @@ const styles = StyleSheet.create({
   textWhite: {
     color: '#FFF',
   },
-  createBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: THEME.colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    ...THEME.shadows.sm,
-  },
-  createBtnText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
   loadingBox: {
     flex: 1,
     justifyContent: 'center',
@@ -344,15 +505,39 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingTop: 4,
+    paddingTop: 10,
     paddingBottom: 30,
   },
   emptyBox: {
-    padding: 30,
+    padding: 36,
     alignItems: 'center',
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: THEME.colors.textPrimary,
   },
   emptyText: {
     color: THEME.colors.textMuted,
-    fontSize: 13,
+    fontSize: 12,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  emptyCreateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: THEME.colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  emptyCreateBtnText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });
+

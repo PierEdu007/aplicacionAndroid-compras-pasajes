@@ -225,3 +225,103 @@ export async function emitirComprobanteSunat(
     };
   }
 }
+
+/**
+ * Anular Comprobante Electrónico (Comunicación de Baja ante SUNAT)
+ */
+export async function anularComprobanteSunat(
+  tipoComprobante: 'BOLETA' | 'FACTURA' | 'RUC' | 'DNI',
+  serie: string,
+  numero: number,
+  motivo?: string,
+  customConfig?: SunatConfig
+): Promise<SunatResponse> {
+  const config = customConfig || (await getSunatConfig());
+
+  if (config.enabled === false) {
+    return {
+      success: false,
+      error: 'La facturación SUNAT está deshabilitada.',
+    };
+  }
+
+  const isFactura = tipoComprobante === 'FACTURA' || tipoComprobante === 'RUC' || serie.startsWith('F');
+  const tipoDocSunat = isFactura ? 1 : 2;
+
+  const payload = {
+    operacion: 'anular_comprobante',
+    tipo_de_comprobante: tipoDocSunat,
+    serie: serie,
+    numero: numero,
+    motivo: motivo || 'Anulación por error en emisión de viaje especial',
+  };
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/emitir-comprobante`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiUrl: config.apiUrl,
+        apiToken: config.apiToken,
+        payload,
+      }),
+    });
+
+    const result = await res.json();
+
+    if (!res.ok || result.errors) {
+      const errMsg = typeof result.errors === 'string' ? result.errors : (result.message || '');
+      
+      // Reintento con generar_anulacion si anular_comprobante no es reconocido
+      if (errMsg.toLowerCase().includes('operacion') || errMsg.toLowerCase().includes('operación')) {
+        try {
+          const retryRes = await fetch(`${API_BASE_URL}/api/emitir-comprobante`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiUrl: config.apiUrl,
+              apiToken: config.apiToken,
+              payload: { ...payload, operacion: 'generar_anulacion' },
+            }),
+          });
+          if (retryRes.ok) {
+            const retryResult = await retryRes.json();
+            if (!retryResult.errors) {
+              return {
+                success: true,
+                serie: retryResult.serie || serie,
+                numero: retryResult.numero || numero,
+                pdfUrl: retryResult.enlace_del_pdf,
+                xmlUrl: retryResult.enlace_del_xml,
+                cdrUrl: retryResult.enlace_del_cdr,
+                sunatMessage: retryResult.sunat_description || 'Comprobante dado de baja exitosamente ante SUNAT',
+              };
+            }
+          }
+        } catch (_retryErr) {}
+      }
+
+      return {
+        success: false,
+        error: errMsg || 'Error al anular comprobante en NubeFact/SUNAT',
+      };
+    }
+
+    return {
+      success: true,
+      serie: result.serie || serie,
+      numero: result.numero || numero,
+      pdfUrl: result.enlace_del_pdf,
+      xmlUrl: result.enlace_del_xml,
+      cdrUrl: result.enlace_del_cdr,
+      sunatMessage: result.sunat_description || 'Comprobante dado de baja exitosamente ante SUNAT',
+    };
+  } catch (err: any) {
+    console.error('Error al anular en SUNAT:', err);
+    return {
+      success: false,
+      error: err.message || 'Error de conexión al anular con SUNAT',
+    };
+  }
+}
+

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Header } from '../components/Header';
@@ -18,7 +19,9 @@ import { supabase } from '../lib/supabase';
 import { Venta } from '../types/database';
 import { emitirComprobanteSunat } from '../services/sunatService';
 import { sendConfirmationEmail } from '../services/emailService';
-import { Search, Filter, Plus } from 'lucide-react-native';
+import { Search, Filter, Plus, Calendar, X } from 'lucide-react-native';
+import { CalendarModal } from '../components/CalendarModal';
+import { getPeruTodayString, formatPeruDateDisplay } from '../utils/dateHelper';
 
 interface SalesScreenProps {
   onOpenDirectSale: () => void;
@@ -30,6 +33,8 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'CONFIRMED' | 'ESPECIAL'>('ALL');
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null);
+  const [showDateCalendar, setShowDateCalendar] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const loadSales = async () => {
@@ -259,6 +264,13 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
 
     if (!matchesSearch) return false;
 
+    // Date Filter (matching created_at or trip date)
+    if (selectedDateFilter) {
+      const matchCreatedAt = v.created_at?.startsWith(selectedDateFilter);
+      const matchTripDate = v.viajes?.fecha_viaje === selectedDateFilter;
+      if (!matchCreatedAt && !matchTripDate) return false;
+    }
+
     const isConfirmed = v.comprobante_emitido || v.estado === 'CONFIRMADO';
     const isSpecial = v.numero_asiento <= 0 || Boolean(v.culqi_charge_id?.includes('ESPECIAL'));
 
@@ -295,49 +307,86 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
         </TouchableOpacity>
       </View>
 
-      {/* Filter Chips */}
-      <View style={styles.chipsRow}>
-        <TouchableOpacity
-          style={[styles.chip, filterStatus === 'ALL' && styles.chipActive]}
-          onPress={() => setFilterStatus('ALL')}
+      {/* Filter Chips Scrollable */}
+      <View style={styles.chipsScrollWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipsRow}
         >
-          <Text style={[styles.chipText, filterStatus === 'ALL' && styles.chipTextActive]}>
-            Todas ({ventas.length})
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chip, filterStatus === 'ALL' && styles.chipActive]}
+            onPress={() => setFilterStatus('ALL')}
+          >
+            <Text style={[styles.chipText, filterStatus === 'ALL' && styles.chipTextActive]}>
+              Todas ({ventas.length})
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.chip, filterStatus === 'PENDING' && styles.chipActiveWarning]}
-          onPress={() => setFilterStatus('PENDING')}
-        >
-          <Text style={[styles.chipText, filterStatus === 'PENDING' && styles.chipTextActiveWarning]}>
-            ⏳ Por Verificar
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chip, filterStatus === 'PENDING' && styles.chipActiveWarning]}
+            onPress={() => setFilterStatus('PENDING')}
+          >
+            <Text style={[styles.chipText, filterStatus === 'PENDING' && styles.chipTextActiveWarning]}>
+              ⏳ Por Verificar
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.chip, filterStatus === 'CONFIRMED' && styles.chipActiveSuccess]}
-          onPress={() => setFilterStatus('CONFIRMED')}
-        >
-          <Text style={[styles.chipText, filterStatus === 'CONFIRMED' && styles.chipTextActiveSuccess]}>
-            ✅ Confirmadas
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.chip, filterStatus === 'CONFIRMED' && styles.chipActiveSuccess]}
+            onPress={() => setFilterStatus('CONFIRMED')}
+          >
+            <Text style={[styles.chipText, filterStatus === 'CONFIRMED' && styles.chipTextActiveSuccess]}>
+              ✅ Confirmadas
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.chip,
-            filterStatus === 'ESPECIAL' && { backgroundColor: '#742284', borderColor: '#742284' }
-          ]}
-          onPress={() => setFilterStatus('ESPECIAL')}
-        >
-          <Text style={[
-            styles.chipText,
-            filterStatus === 'ESPECIAL' && { color: '#FFF', fontWeight: '800' }
-          ]}>
-            ✨ Especiales
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              filterStatus === 'ESPECIAL' && { backgroundColor: '#742284', borderColor: '#742284' }
+            ]}
+            onPress={() => setFilterStatus('ESPECIAL')}
+          >
+            <Text style={[
+              styles.chipText,
+              filterStatus === 'ESPECIAL' && { color: '#FFF', fontWeight: '800' }
+            ]}>
+              ✨ Especiales
+            </Text>
+          </TouchableOpacity>
+
+          {/* Calendar Picker Filter Chip */}
+          <TouchableOpacity
+            style={[
+              styles.chip,
+              styles.calendarChip,
+              selectedDateFilter ? styles.chipActive : null,
+            ]}
+            onPress={() => setShowDateCalendar(true)}
+          >
+            <Calendar size={13} color={selectedDateFilter ? '#FFF' : THEME.colors.primary} />
+            <Text
+              style={[
+                styles.chipText,
+                selectedDateFilter ? styles.chipTextActive : { color: THEME.colors.primary },
+              ]}
+            >
+              {selectedDateFilter ? `📅 ${formatPeruDateDisplay(selectedDateFilter)}` : '📅 Fecha'}
+            </Text>
+            {selectedDateFilter && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setSelectedDateFilter(null);
+                }}
+                style={styles.clearDateBtn}
+              >
+                <X size={12} color="#FFF" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
       </View>
 
       {/* Sales List */}
@@ -365,11 +414,22 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No hay ventas que coincidan con la búsqueda.</Text>
+              <Text style={styles.emptyText}>No hay ventas que coincidan con la búsqueda o fecha seleccionada.</Text>
             </View>
           }
         />
       )}
+
+      {/* Calendar Filter Modal */}
+      <CalendarModal
+        visible={showDateCalendar}
+        selectedDate={selectedDateFilter || getPeruTodayString()}
+        minDate=""
+        onSelectDate={(newDate) => {
+          setSelectedDateFilter(newDate);
+        }}
+        onClose={() => setShowDateCalendar(false)}
+      />
     </View>
   );
 };
@@ -418,6 +478,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
+  chipsScrollWrapper: {
+    backgroundColor: THEME.colors.background,
+  },
   chipsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -425,12 +488,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: THEME.colors.surface,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: THEME.colors.border,
+  },
+  calendarChip: {
+    borderColor: THEME.colors.primary,
+  },
+  clearDateBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 10,
+    padding: 2,
+    marginLeft: 2,
   },
   chipActive: {
     backgroundColor: THEME.colors.primary,

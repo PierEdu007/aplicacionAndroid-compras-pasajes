@@ -9,7 +9,7 @@ interface CalendarModalProps {
   selectedDate: string; // YYYY-MM-DD
   onSelectDate: (date: string) => void;
   onClose: () => void;
-  minDate?: string; // YYYY-MM-DD
+  minDate?: string | null; // YYYY-MM-DD or null/empty for no minimum
 }
 
 const MONTH_NAMES = [
