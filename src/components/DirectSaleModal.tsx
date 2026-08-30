@@ -401,6 +401,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
         ? `ESPECIAL-${metodoPago}-${Date.now()}|ORIGEN:${cleanO}|DESTINO:${cleanD}`
         : (metodoPago === 'YAPE'
             ? `YAPE-${codigoOpYape || Date.now()}|TIPO:${selectedVehicleType}`
+            : `PRESENCIAL-${metodoPago}-${Date.now()}|TIPO:${selectedVehicleType}`);
+
       // Generar un número de asiento no positivo único para viajes especiales que evite colisiones con el índice único idx_venta_unica
       const seatNumber = isEspecial
         ? -Math.floor((Date.now() % 100000000) + Math.random() * 1000)
