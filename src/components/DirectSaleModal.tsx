@@ -244,18 +244,37 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     }
   };
 
-  const updateDetalleFactura = (nombresVal: string, apellidosVal: string, tipoDocVal: string, nroDocVal: string) => {
-    const isEspecial = saleMode === 'ESPECIAL';
-    const origen = isEspecial ? especialOrigen.trim().toUpperCase() : (activeTrip?.rutas?.origen || 'CUSCO');
-    const destino = isEspecial ? especialDestino.trim().toUpperCase() : (activeTrip?.rutas?.destino || 'QUILLABAMBA');
-    
-    if (isEspecial) {
-      const desc = `SERVICIO DE TRANSPORTE ${origen} ${destino} ${nombresVal} ${apellidosVal} ${tipoDocVal}...(${nroDocVal})`.toUpperCase().trim();
-      setDetalleFactura(desc);
-    } else {
-      const asiento = selectedSeat || 0;
-      const desc = `SERVICIO DE TRANSPORTE ${origen} - ${destino} PASAJERO: ${nombresVal} ${apellidosVal} ${tipoDocVal}...(${nroDocVal}) ASIENTO #${asiento}`.toUpperCase().trim();
-      setDetalleFactura(desc);
+  const buildDetalleFactura = (
+    nombresVal: string,
+    apellidosVal: string,
+    dniVal: string,
+    tripDate: string = selectedDate
+  ) => {
+    const fullName = `${nombresVal || ''} ${apellidosVal || ''}`.trim().toUpperCase();
+    const cleanDni = (dniVal || '').trim().replace(/\D/g, '');
+    if (!fullName && !cleanDni) return '';
+
+    let text = `${fullName}${cleanDni ? ` DNI...${cleanDni}` : ''}`.trim();
+
+    // Si la fecha de servicio es a partir del día siguiente del que se emitió la factura (hoy en Perú)
+    const todayPeru = getPeruTodayString();
+    if (tripDate && tripDate > todayPeru) {
+      const parts = tripDate.split('-');
+      if (parts.length === 3) {
+        const [yyyy, mm, dd] = parts;
+        const aa = yyyy.length === 4 ? yyyy.substring(2) : yyyy;
+        text += ` FECHA DE VIAJE ${dd}...${mm}...${aa}`;
+      }
+    }
+
+    return text.toUpperCase().trim();
+  };
+
+  const onDateSelected = (newDate: string) => {
+    setSelectedDate(newDate);
+    const activeDni = tipoDoc === 'RUC' ? dniPasajero : nroDoc;
+    if (activeDni && activeDni.trim().length === 8 && nombres.trim()) {
+      setDetalleFactura(buildDetalleFactura(nombres, apellidos, activeDni, newDate));
     }
   };
 
@@ -266,11 +285,11 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       const res = await lookupDni(clean);
       setLookingUpDoc(false);
       if (res && res.nombres) {
-        const fullName = `${res.nombres} ${res.apellidoPaterno} ${res.apellidoMaterno}`.trim();
+        const ape = `${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim();
         setNombres(res.nombres);
-        setApellidos(`${res.apellidoPaterno} ${res.apellidoMaterno}`.trim());
-        // Auto-actualizar el detalle de la factura con formato DNI
-        updateDetalleFactura(res.nombres, `${res.apellidoPaterno} ${res.apellidoMaterno}`.trim(), 'DNI', clean);
+        setApellidos(ape);
+        // Auto-actualizar el detalle únicamente al consultar DNI: NOMBRE COMPLETO DNI...12345678 [FECHA DE VIAJE DD...MM...AA]
+        setDetalleFactura(buildDetalleFactura(res.nombres, ape, clean, selectedDate));
       } else {
         Alert.alert('Aviso', 'DNI no encontrado en RENIEC. Ingrese los nombres manualmente.');
       }
@@ -281,8 +300,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       if (res && res.razonSocial) {
         setRazonSocial(res.razonSocial);
         setDireccionFiscal(res.direccion || 'CUSCO');
-        // Auto-actualizar detalle con razón social
-        updateDetalleFactura(res.razonSocial, '', 'RUC', clean);
+        // NOTA: No generar ni poner el nombre de la empresa ni número de RUC en el detalle
       } else {
         Alert.alert('Aviso', 'RUC no encontrado en SUNAT. Ingrese los datos manualmente.');
       }
@@ -298,10 +316,11 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       const res = await lookupDni(clean);
       setLookingUpDniPasajero(false);
       if (res && res.nombres) {
+        const ape = `${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim();
         setNombres(res.nombres);
-        setApellidos(`${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim());
-        // Auto-actualizar detalle con datos del pasajero
-        updateDetalleFactura(res.nombres, `${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim(), 'DNI', clean);
+        setApellidos(ape);
+        // Auto-actualizar detalle de factura para el pasajero de la Factura
+        setDetalleFactura(buildDetalleFactura(res.nombres, ape, clean, selectedDate));
       } else {
         Alert.alert('Aviso', 'DNI del pasajero no encontrado en RENIEC. Ingrese los nombres manualmente.');
       }
@@ -749,7 +768,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                 <View style={styles.dateSelectorRow}>
                   <TouchableOpacity
                     style={[styles.dateChip, selectedDate === getPeruTodayString() && styles.chipActive]}
-                    onPress={() => setSelectedDate(getPeruTodayString())}
+                    onPress={() => onDateSelected(getPeruTodayString())}
                   >
                     <Calendar size={14} color={selectedDate === getPeruTodayString() ? '#FFF' : THEME.colors.textSecondary} />
                     <Text style={[styles.chipText, selectedDate === getPeruTodayString() && styles.textWhite]}>
@@ -759,7 +778,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
 
                   <TouchableOpacity
                     style={[styles.dateChip, selectedDate === getPeruTomorrowString() && styles.chipActive]}
-                    onPress={() => setSelectedDate(getPeruTomorrowString())}
+                    onPress={() => onDateSelected(getPeruTomorrowString())}
                   >
                     <Calendar size={14} color={selectedDate === getPeruTomorrowString() ? '#FFF' : THEME.colors.textSecondary} />
                     <Text style={[styles.chipText, selectedDate === getPeruTomorrowString() && styles.textWhite]}>
@@ -1123,7 +1142,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
                 style={styles.detailPreviewInput}
                 value={detalleFactura}
                 onChangeText={(text) => setDetalleFactura(text.toUpperCase())}
-                placeholder="El detalle se generará automáticamente al consultar el DNI/RUC..."
+                placeholder="El detalle se generará automáticamente al consultar el DNI..."
                 placeholderTextColor="#94A3B8"
                 multiline
                 numberOfLines={4}
@@ -1167,7 +1186,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
           <CalendarModal
             visible={showCalendar}
             selectedDate={selectedDate}
-            onSelectDate={(newDate) => setSelectedDate(newDate)}
+            onSelectDate={(newDate) => onDateSelected(newDate)}
             onClose={() => setShowCalendar(false)}
           />
         </View>

@@ -60,25 +60,25 @@ jobs:
       - name: 🚀 Publicar Release con Enlace de Descarga Directa
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.5
-          name: Tunky Chasky Admin v1.2.5 (Descarga PDF + XML y Detalle Editable con Formato DNI)
+          tag_name: v1.2.6
+          name: Tunky Chasky Admin v1.2.6 (Formato Exacto de Detalle DNI y Fecha de Viaje)
           body: |
-            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.5
+            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.6
 
             Aplicación oficial de gestión de ventas y control de pasajes para **Inversiones Tunki Chasky S.R.L.**:
 
             ### 📥 Descarga Directa del Instalador APK:
-            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.5/TunkyChaskyAdmin.apk)** (Última versión)
-            - **[TunkyChaskyAdmin-v1.2.5.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.5/TunkyChaskyAdmin-v1.2.5.apk)**
+            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.6/TunkyChaskyAdmin.apk)** (Última versión)
+            - **[TunkyChaskyAdmin-v1.2.6.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.6/TunkyChaskyAdmin-v1.2.6.apk)**
 
             ---
 
-            ### ✨ Novedades y Mejoras v1.2.5:
-            - **📄 Descarga de Comprobante PDF y Archivo XML Oficial**: Acceso directo a los dos tipos de archivos (PDF y XML de SUNAT/NubeFact) desde la tarjeta de venta en la app y en la web tanto para rutas normales como especiales.
-            - **✏️ Detalle de Factura / Boleta Editable**: Cuadro de texto multilínea al final del formulario antes de emitir, permitiendo visualizar y modificar libremente todo el detalle que saldrá impreso en SUNAT.
-            - **🔍 Autocompletado con Formato DNI**: Al consultar el DNI del pasajero por RENIEC, el detalle se genera automáticamente con el formato `NOMBRE COMPLETO DNI...(número)`.
-            - **⚡ Anulación Oficial Directa en SUNAT (Mismo Día)**: Comunicación de Baja inmediata para comprobantes emitidos en el día.
-            - **📞 Correo y Celular Opcionales en Ventas Especiales**: Flexibilidad de venta inmediata.
+            ### ✨ Novedades y Mejoras v1.2.6:
+            - **🔍 Formato Exacto de Detalle DNI**: Al consultar el DNI del pasajero con RENIEC, el detalle se genera con el formato exacto `NOMBRE COMPLETO DNI...12345678` (sin paréntesis).
+            - **📅 Inclusión Automática de Fecha de Viaje**: Si la fecha del servicio es a partir del día siguiente de la emisión de la factura, se incluye automáticamente `FECHA DE VIAJE DD...MM...AA`.
+            - **🏢 Generación de Detalle exclusivo al consultar DNI**: La consulta de RUC no llena el detalle de factura (evitando datos de empresa en el ítem), reservando el detalle para el DNI del pasajero.
+            - **📄 Descarga de PDF y XML Oficial**: Acceso directo a los dos archivos oficiales desde la app y la web.
+            - **✏️ Detalle Editable en Tiempo Real**: Cuadro de texto para modificar libremente la descripción antes de emitir a SUNAT.
 
             ---
             #### 📋 Instrucciones de Instalación:
@@ -88,7 +88,7 @@ jobs:
             4. Presiona **Instalar** y ¡listo!
           files: |
             build-output/TunkyChaskyAdmin.apk
-            build-output/TunkyChaskyAdmin-v1.2.5.apk
+            build-output/TunkyChaskyAdmin-v1.2.6.apk
           draft: false
           prerelease: false
           make_latest: true
