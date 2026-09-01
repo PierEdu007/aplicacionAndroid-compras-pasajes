@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert } from 'react-native';
 import { THEME } from '../constants/theme';
 import { Venta } from '../types/database';
-import { CheckCircle2, XCircle, FileText, Share2, Phone, MessageCircle, Mail, Clock, Trash2 } from 'lucide-react-native';
+import { CheckCircle2, XCircle, FileText, FileCode, Share2, Phone, MessageCircle, Mail, Clock, Trash2 } from 'lucide-react-native';
 import { generateAndShareTicket } from '../services/ticketPdfService';
 
 interface SaleCardProps {
@@ -28,6 +28,13 @@ export const SaleCard: React.FC<SaleCardProps> = ({
   const isRejected = venta.estado === 'RECHAZADO' || venta.culqi_charge_id?.startsWith('RECHAZADO_');
   const isPending = !isConfirmed && !isRejected;
   const isSpecial = venta.numero_asiento <= 0 || Boolean(venta.culqi_charge_id?.includes('ESPECIAL'));
+
+  // Enlace oficial del comprobante XML de NubeFact / SUNAT
+  const xmlUrl =
+    venta.comprobante_xml_url ||
+    (venta.comprobante_url && venta.comprobante_url.includes('nubefact.com')
+      ? venta.comprobante_url.replace(/\.pdf(\?.*)?$/i, '.xml$1')
+      : null);
 
   const handleCall = () => {
     if (venta.telefono) {
@@ -203,15 +210,19 @@ export const SaleCard: React.FC<SaleCardProps> = ({
               <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>PDF SUNAT</Text>
             </TouchableOpacity>
 
-            {venta.comprobante_xml_url && (
+            {xmlUrl ? (
               <TouchableOpacity
-                style={[styles.actionBtn, { borderColor: '#742284' }]}
-                onPress={() => Linking.openURL(venta.comprobante_xml_url!)}
+                style={[styles.actionBtn, styles.xmlBtn]}
+                onPress={() => {
+                  Linking.openURL(xmlUrl).catch(() => {
+                    Alert.alert('Error', 'No se pudo abrir el archivo XML.');
+                  });
+                }}
               >
-                <FileText size={15} color="#742284" />
+                <FileCode size={15} color="#742284" />
                 <Text style={[styles.actionBtnText, { color: '#742284' }]}>XML</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
 
             <TouchableOpacity
               style={[styles.actionBtn, styles.emailBtn]}
@@ -437,6 +448,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FEE2E2',
+  },
+  xmlBtn: {
+    backgroundColor: '#FAF5FF',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
   },
   emailBtn: {
     backgroundColor: THEME.colors.primarySoft,

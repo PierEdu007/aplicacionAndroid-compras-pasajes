@@ -89,6 +89,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
       });
 
       const finalUrl = sunatRes.pdfUrl || venta.comprobante_url;
+      const finalXmlUrl = sunatRes.xmlUrl || (finalUrl && finalUrl.includes('nubefact.com') ? finalUrl.replace(/\.pdf(\?.*)?$/i, '.xml$1') : null);
       const finalNro = sunatRes.serie && sunatRes.numero ? `${sunatRes.serie}-${sunatRes.numero}` : venta.nro_comprobante;
 
       // 2. Actualizar Supabase
@@ -98,7 +99,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
           comprobante_emitido: true,
           estado: 'CONFIRMADO',
           comprobante_url: finalUrl,
-          comprobante_xml_url: sunatRes?.xmlUrl || null,
+          comprobante_xml_url: finalXmlUrl,
           nro_comprobante: finalNro,
         })
         .eq('id', venta.id);
@@ -107,7 +108,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
       if (venta.email) {
         await sendConfirmationEmail(venta, {
           pdfUrl: sunatRes.pdfUrl,
-          xmlUrl: sunatRes.xmlUrl,
+          xmlUrl: finalXmlUrl || undefined,
           serie: sunatRes.serie,
           numero: sunatRes.numero,
         });
@@ -122,7 +123,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
                 comprobante_emitido: true,
                 estado: 'CONFIRMADO',
                 comprobante_url: finalUrl,
-                comprobante_xml_url: sunatRes?.xmlUrl || null,
+                comprobante_xml_url: finalXmlUrl,
                 nro_comprobante: finalNro,
               }
             : v
