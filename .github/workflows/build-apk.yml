@@ -48,7 +48,7 @@ jobs:
         run: |
           mkdir -p build-output
           cp android/app/build/outputs/apk/release/app-release.apk build-output/TunkyChaskyAdmin.apk || cp android/app/build/outputs/apk/release/*.apk build-output/TunkyChaskyAdmin.apk
-          cp build-output/TunkyChaskyAdmin.apk build-output/TunkyChaskyAdmin-v1.2.1.apk
+          cp build-output/TunkyChaskyAdmin.apk build-output/TunkyChaskyAdmin-v1.3.0.apk
 
       - name: 📤 Subir APK como Artefacto de Descarga
         uses: actions/upload-artifact@v4
@@ -60,35 +60,36 @@ jobs:
       - name: 🚀 Publicar Release con Enlace de Descarga Directa
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.6
-          name: Tunky Chasky Admin v1.2.6 (Formato Exacto de Detalle DNI y Fecha de Viaje)
+          tag_name: v1.3.0
+          name: Tunky Chasky Admin v1.3.0 (Programación de Rutas, Calendario y Archivo XML SUNAT)
           body: |
-            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.2.6
+            ## 📱 Aplicación Móvil Oficial - Tunky Chasky Admin v1.3.0
 
-            Aplicación oficial de gestión de ventas y control de pasajes para **Inversiones Tunki Chasky S.R.L.**:
+            Aplicación oficial de gestión de viajes, ventas y comprobantes electrónicos para **Inversiones Tunky Chasky S.R.L.**:
 
             ### 📥 Descarga Directa del Instalador APK:
-            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.6/TunkyChaskyAdmin.apk)** (Última versión)
-            - **[TunkyChaskyAdmin-v1.2.6.apk](https://github.com/${{ github.repository }}/releases/download/v1.2.6/TunkyChaskyAdmin-v1.2.6.apk)**
+            - **[TunkyChaskyAdmin.apk](https://github.com/${{ github.repository }}/releases/download/v1.3.0/TunkyChaskyAdmin.apk)** (Última versión lista para instalar)
+            - **[TunkyChaskyAdmin-v1.3.0.apk](https://github.com/${{ github.repository }}/releases/download/v1.3.0/TunkyChaskyAdmin-v1.3.0.apk)**
 
             ---
 
-            ### ✨ Novedades y Mejoras v1.2.6:
-            - **🔍 Formato Exacto de Detalle DNI**: Al consultar el DNI del pasajero con RENIEC, el detalle se genera con el formato exacto `NOMBRE COMPLETO DNI...12345678` (sin paréntesis).
-            - **📅 Inclusión Automática de Fecha de Viaje**: Si la fecha del servicio es a partir del día siguiente de la emisión de la factura, se incluye automáticamente `FECHA DE VIAJE DD...MM...AA`.
-            - **🏢 Generación de Detalle exclusivo al consultar DNI**: La consulta de RUC no llena el detalle de factura (evitando datos de empresa en el ítem), reservando el detalle para el DNI del pasajero.
-            - **📄 Descarga de PDF y XML Oficial**: Acceso directo a los dos archivos oficiales desde la app y la web.
-            - **✏️ Detalle Editable en Tiempo Real**: Cuadro de texto para modificar libremente la descripción antes de emitir a SUNAT.
+            ### ✨ Novedades y Mejoras v1.3.0:
+            - **📄 Archivo XML de SUNAT**: Botón directo para visualizar y descargar el archivo XML oficial emitido por NubeFact.
+            - **🚀 Gestión de Salidas para Empleados**: Los usuarios con rol `EMPLEADO` y `VENDEDOR` ahora pueden crear y publicar salidas programadas (4P, 6P o ambas camionetas).
+            - **🗺️ Registro Dinámico de Nuevas Rutas**: Agrega cualquier ruta con origen, destino y duración directamente desde el modal de creación.
+            - **📅 Filtro de Calendario por Fecha Específica**: Selector visual de calendario para consultar salidas y ventas en cualquier fecha del año.
+            - **🔍 Buscador Reactivo**: Búsqueda instantánea en vivo por ruta, hora, auto, DNI o pasajero.
+            - **🧾 Detalle de Factura / Boleta**: Formato exacto RENIEC y fecha de viaje para servicios futuros.
 
             ---
             #### 📋 Instrucciones de Instalación:
             1. Descarga el archivo **`TunkyChaskyAdmin.apk`** en tu celular Android.
             2. Abre el archivo descargado.
             3. Si solicita permisos, selecciona **"Permitir instalar aplicaciones de esta fuente"**.
-            4. Presiona **Instalar** y ¡listo!
+            4. Presiona **Instalar** e inicia sesión con tu usuario y contraseña.
           files: |
             build-output/TunkyChaskyAdmin.apk
-            build-output/TunkyChaskyAdmin-v1.2.6.apk
+            build-output/TunkyChaskyAdmin-v1.3.0.apk
           draft: false
           prerelease: false
           make_latest: true
