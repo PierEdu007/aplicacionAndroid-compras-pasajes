@@ -63,6 +63,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
   const [especialMonto, setEspecialMonto] = useState('100.00');
   const [especialHora, setEspecialHora] = useState('08:00');
   const [especialDescripcion, setEspecialDescripcion] = useState('');
+  const [detalleFactura, setDetalleFactura] = useState('');
 
   // Step 1: Filters (Fecha, Ruta, Hora)
   const [selectedDate, setSelectedDate] = useState(getPeruTodayString());
@@ -243,6 +244,21 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
     }
   };
 
+  const updateDetalleFactura = (nombresVal: string, apellidosVal: string, tipoDocVal: string, nroDocVal: string) => {
+    const isEspecial = saleMode === 'ESPECIAL';
+    const origen = isEspecial ? especialOrigen.trim().toUpperCase() : (activeTrip?.rutas?.origen || 'CUSCO');
+    const destino = isEspecial ? especialDestino.trim().toUpperCase() : (activeTrip?.rutas?.destino || 'QUILLABAMBA');
+    
+    if (isEspecial) {
+      const desc = `SERVICIO DE TRANSPORTE ${origen} ${destino} ${nombresVal} ${apellidosVal} ${tipoDocVal}...(${nroDocVal})`.toUpperCase().trim();
+      setDetalleFactura(desc);
+    } else {
+      const asiento = selectedSeat || 0;
+      const desc = `SERVICIO DE TRANSPORTE ${origen} - ${destino} PASAJERO: ${nombresVal} ${apellidosVal} ${tipoDocVal}...(${nroDocVal}) ASIENTO #${asiento}`.toUpperCase().trim();
+      setDetalleFactura(desc);
+    }
+  };
+
   const handleLookupDoc = async () => {
     const clean = nroDoc.trim().replace(/\D/g, '');
     if (tipoDoc === 'DNI' && clean.length === 8) {
@@ -250,8 +266,11 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       const res = await lookupDni(clean);
       setLookingUpDoc(false);
       if (res && res.nombres) {
+        const fullName = `${res.nombres} ${res.apellidoPaterno} ${res.apellidoMaterno}`.trim();
         setNombres(res.nombres);
         setApellidos(`${res.apellidoPaterno} ${res.apellidoMaterno}`.trim());
+        // Auto-actualizar el detalle de la factura con formato DNI
+        updateDetalleFactura(res.nombres, `${res.apellidoPaterno} ${res.apellidoMaterno}`.trim(), 'DNI', clean);
       } else {
         Alert.alert('Aviso', 'DNI no encontrado en RENIEC. Ingrese los nombres manualmente.');
       }
@@ -262,6 +281,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       if (res && res.razonSocial) {
         setRazonSocial(res.razonSocial);
         setDireccionFiscal(res.direccion || 'CUSCO');
+        // Auto-actualizar detalle con razón social
+        updateDetalleFactura(res.razonSocial, '', 'RUC', clean);
       } else {
         Alert.alert('Aviso', 'RUC no encontrado en SUNAT. Ingrese los datos manualmente.');
       }
@@ -279,6 +300,8 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       if (res && res.nombres) {
         setNombres(res.nombres);
         setApellidos(`${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim());
+        // Auto-actualizar detalle con datos del pasajero
+        updateDetalleFactura(res.nombres, `${res.apellidoPaterno || ''} ${res.apellidoMaterno || ''}`.trim(), 'DNI', clean);
       } else {
         Alert.alert('Aviso', 'DNI del pasajero no encontrado en RENIEC. Ingrese los nombres manualmente.');
       }
@@ -337,9 +360,9 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
       const cleanO = isEspecial ? especialOrigen.trim().toUpperCase() : (activeTrip?.rutas?.origen || 'CUSCO');
       const cleanD = isEspecial ? especialDestino.trim().toUpperCase() : (activeTrip?.rutas?.destino || 'QUILLABAMBA');
       const finalMonto = isEspecial ? parseFloat(especialMonto) || 0 : (activeTrip?.precio_base || 0);
-      const finalDesc = isEspecial 
+      const finalDesc = detalleFactura.trim() || (isEspecial 
         ? especialDescripcion.trim().toUpperCase() 
-        : (dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : '');
+        : (dniPasajero.trim() ? `DNI ${dniPasajero.trim()}` : ''));
 
       let tripId = activeTrip?.id;
 
@@ -485,6 +508,7 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
           .from('ventas')
           .update({
             comprobante_url: sunatRes.pdfUrl,
+            comprobante_xml_url: sunatRes.xmlUrl || null,
             nro_comprobante: `${sunatRes.serie}-${sunatRes.numero}`,
           })
           .eq('id', ventaData.id);
@@ -1092,6 +1116,25 @@ export const DirectSaleModal: React.FC<DirectSaleModalProps> = ({
               </View>
             )}
 
+            {/* VISTA PREVIA DEL DETALLE DE LA FACTURA */}
+            <View style={styles.detailPreviewContainer}>
+              <Text style={styles.detailPreviewTitle}>Detalle de la Factura / Boleta (Editable):</Text>
+              <TextInput
+                style={styles.detailPreviewInput}
+                value={detalleFactura}
+                onChangeText={(text) => setDetalleFactura(text.toUpperCase())}
+                placeholder="El detalle se generará automáticamente al consultar el DNI/RUC..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={4}
+                autoCapitalize="characters"
+                textAlignVertical="top"
+              />
+              <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>
+                Este texto aparecerá impreso en la Factura/Boleta oficial de SUNAT. Puede editarlo libremente.
+              </Text>
+            </View>
+
             {/* BOTÓN FINAL DE EMISIÓN */}
             <TouchableOpacity
               style={[
@@ -1547,5 +1590,32 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 15,
     fontWeight: '800',
+  },
+  detailPreviewContainer: {
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  detailPreviewTitle: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    fontWeight: '700' as const,
+    marginBottom: 8,
+  },
+  detailPreviewInput: {
+    backgroundColor: '#0F172A',
+    color: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 13,
+    fontFamily: 'monospace',
+    borderWidth: 1,
+    borderColor: '#475569',
+    minHeight: 80,
+    textAlignVertical: 'top' as const,
   },
 });

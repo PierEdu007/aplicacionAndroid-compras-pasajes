@@ -86,6 +86,7 @@ export interface Venta {
   descripcion_opcional?: string;
   comprobante_emitido: boolean;
   comprobante_url: string | null;
+  comprobante_xml_url?: string | null;
   nro_comprobante?: string;
   estado_sunat?: string;
   estado?: string;

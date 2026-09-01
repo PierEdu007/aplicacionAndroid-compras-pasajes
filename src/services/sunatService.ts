@@ -110,9 +110,13 @@ export async function emitirComprobanteSunat(
   const [yyyy, mm, dd] = todayStr.split('-');
   const fechaEmisionNubeFact = `${dd}-${mm}-${yyyy}`;
 
-  const itemDescripcion = data.esViajeEspecial
-    ? `SERVICIO DE TRANSPORTE ${data.origen} ${data.destino}${data.descripcionOpcional ? ' ' + data.descripcionOpcional : ''}`.toUpperCase().trim()
-    : `SERVICIO DE TRANSPORTE ${data.origen} - ${data.destino} PASAJERO: ${data.nombres} ${data.apellidos} ${data.tipoDocumento}.${data.nroDocumento} ASIENTO #${data.asiento}${data.descripcionOpcional ? ' - ' + data.descripcionOpcional : (data.dniPasajero ? ' - DNI ' + data.dniPasajero : '')}`.toUpperCase();
+  // Si descripcionOpcional tiene más de 30 caracteres, se considera un detalle editado manualmente
+  const usarDescripcionManual = data.descripcionOpcional && data.descripcionOpcional.trim().length > 30;
+  const itemDescripcion = usarDescripcionManual
+    ? data.descripcionOpcional!.toUpperCase().trim()
+    : data.esViajeEspecial
+      ? `SERVICIO DE TRANSPORTE ${data.origen} ${data.destino}`.toUpperCase().trim()
+      : `SERVICIO DE TRANSPORTE ${data.origen} - ${data.destino} PASAJERO: ${data.nombres} ${data.apellidos} ${data.tipoDocumento}.${data.nroDocumento} ASIENTO #${data.asiento}${data.dniPasajero ? ' - DNI ' + data.dniPasajero : ''}`.toUpperCase();
 
   const itemCodigo = data.esViajeEspecial ? 'SERV-ESP' : `PAS-${data.asiento}`;
 

@@ -98,6 +98,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
           comprobante_emitido: true,
           estado: 'CONFIRMADO',
           comprobante_url: finalUrl,
+          comprobante_xml_url: sunatRes?.xmlUrl || null,
           nro_comprobante: finalNro,
         })
         .eq('id', venta.id);
@@ -121,6 +122,7 @@ export const SalesScreen: React.FC<SalesScreenProps> = ({ onOpenDirectSale }) =>
                 comprobante_emitido: true,
                 estado: 'CONFIRMADO',
                 comprobante_url: finalUrl,
+                comprobante_xml_url: sunatRes?.xmlUrl || null,
                 nro_comprobante: finalNro,
               }
             : v

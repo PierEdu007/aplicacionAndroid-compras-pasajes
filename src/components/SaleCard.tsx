@@ -203,6 +203,16 @@ export const SaleCard: React.FC<SaleCardProps> = ({
               <Text style={[styles.actionBtnText, { color: '#DC2626' }]}>PDF SUNAT</Text>
             </TouchableOpacity>
 
+            {venta.comprobante_xml_url && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { borderColor: '#742284' }]}
+                onPress={() => Linking.openURL(venta.comprobante_xml_url!)}
+              >
+                <FileText size={15} color="#742284" />
+                <Text style={[styles.actionBtnText, { color: '#742284' }]}>XML</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={[styles.actionBtn, styles.emailBtn]}
               onPress={() => onResendEmail(venta)}
